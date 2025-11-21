@@ -3,13 +3,18 @@ from io import StringIO
 
 st.set_page_config(layout = "wide")
 st.title("CiteConnect")
+
+# setting the session state variables
+if "letter_text" not in st.session_state:
+    st.session_state.letter_text = ""
                    
 
-## Upload data
-def get_letter_text():
+def load_file():
     
-    
-    st.session_state['letter_area'] = "hello"
+    file = st.session_state['txt_file'] # uploaded file when button senses change
+    if file:
+        data = file.read().decode("utf-8")
+        st.session_state.letter_text = data
 
 
 
@@ -27,14 +32,31 @@ with info:
 
 
 with editor:
+
+    
     st.header("Editor")
+    
+    # TODO: create your own component (upload button) because this is too big
+    upload = st.file_uploader(
+        label="Upload Letter", 
+        accept_multiple_files=False, 
+        type=".txt",
+        key="txt_file",
+        label_visibility="hidden",
+        on_change=load_file)
+
 
     # Visual text area
-    # on change?
-    letter_text = st.text_area(label = "Editor", placeholder="Upload a legal advice letter", key="letter_area")
+    letter_text = st.text_area(
+        label = "Editor", 
+        placeholder="Upload a legal advice letter", 
+        key=st.session_state.letter_text,
+        value = st.session_state.get("letter_text", ""),
+        label_visibility="hidden",
+        height=400)
     
-    download_col, preview_col, upload_col = st.columns(3, vertical_alignment="bottom")
 
+    download_col, preview_col = st.columns(2, vertical_alignment="bottom")
 
     with download_col:
         ## Download button
@@ -56,25 +78,3 @@ with editor:
             type="primary",
             icon=":material/preview:"
         )
-
-    with upload_col:
-        ## Upload button
-        upload = st.button(
-            label= "Upload Letter",
-            type="primary",
-            #on_click = get_letter_text(),
-            icon=":material/upload_file:"
-        )
-
-    #upload = st.file_uploader(
-    #    "Import Legal Advice Letter", 
-    #    accept_multiple_files = False, 
-    #    type=".txt",
-    #    key= "uploaded_letter",
-    #    on_change= get_letter_text()
-    #)
-
-    
-
-
-
