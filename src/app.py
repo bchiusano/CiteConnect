@@ -66,7 +66,6 @@ with info:
     # Check if we should show parameter selection
     if st.session_state.show_parameters and not st.session_state.parameters_confirmed:
         # Ask if user wants to add parameters
-        st.subheader("Add search parameters?")
         st.write("Would you like to specify parameters for the ECLI citation search?")
         
         col1, col2 = st.columns(2)
@@ -78,7 +77,7 @@ with info:
     elif st.session_state.parameters_confirmed:
         # Show parameter form
         st.subheader("Select parameters for ECLI citation search")
-        st.caption("Be aware of possible bias that may come from added parameters!")
+        st.caption("Be aware of possible bias that may come from added parameters.")
         
         # Number of citations
         st.session_state.search_params["num_citations"] = st.number_input(
