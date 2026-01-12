@@ -1,80 +1,197 @@
 import streamlit as st
 from io import StringIO
 
-st.set_page_config(layout = "wide")
+st.set_page_config(layout="wide")
 st.title("CiteConnect")
 
-# setting the session state variables
+# Initialize session state variables
 if "letter_text" not in st.session_state:
     st.session_state.letter_text = ""
-                   
+
+if "show_parameters" not in st.session_state:
+    st.session_state.show_parameters = False
+
+if "parameters_confirmed" not in st.session_state:
+    st.session_state.parameters_confirmed = False
+
+# Store the actual parameters
+if "search_params" not in st.session_state:
+    st.session_state.search_params = {
+        "num_citations": 9,
+        "court_decision": "Irrelevant",
+        "min_accuracy": 75,
+        "additional_requests": ""
+    }
 
 def load_file():
-    
-    file = st.session_state['txt_file'] # uploaded file when button senses change
+    """Load uploaded file into session state"""
+    file = st.session_state['txt_file']
     if file:
         data = file.read().decode("utf-8")
         st.session_state.letter_text = data
 
+def trigger_parameter_selection():
+    """Called when user clicks 'Search Citations' button"""
+    st.session_state.show_parameters = True
+    st.session_state.parameters_confirmed = False
 
+def confirm_parameters():
+    """Called when user confirms they want to set parameters"""
+    st.session_state.parameters_confirmed = True
 
-editor, info = st.columns(spec=[0.5,0.5],
+def decline_parameters():
+    """Called when user declines to set parameters"""
+    st.session_state.show_parameters = False
+    st.session_state.parameters_confirmed = False
+    # Use default parameters and proceed with search
+    # Here you would call your RAG backend with default parameters
+    st.rerun()
+
+def save_parameters():
+    """Called when user clicks Generate button"""
+    st.session_state.show_parameters = False
+    st.session_state.parameters_confirmed = False
+    # Parameters are already saved in session_state.search_params
+    # Here you would call your RAG backend with the saved parameters
+    st.rerun()
+
+# Create columns
+editor, info = st.columns(spec=[0.5, 0.5],
                           gap="medium", 
-                          vertical_alignment="top", 
-                          border=True)
+                          vertical_alignment="top")
 
 with info: 
     st.header("RAG")
-
-    prompt = st.chat_input("Say something" )
-    if prompt:
-        st.write(f"User has sent the following prompt: {prompt}")
-
+    
+    # Check if we should show parameter selection
+    if st.session_state.show_parameters and not st.session_state.parameters_confirmed:
+        # Ask if user wants to add parameters
+        st.subheader("Add search parameters?")
+        st.write("Would you like to specify parameters for the ECLI citation search?")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.button("Yes", on_click=confirm_parameters, type="primary", use_container_width=True)
+        with col2:
+            st.button("No", on_click=decline_parameters, use_container_width=True)
+    
+    elif st.session_state.parameters_confirmed:
+        # Show parameter form
+        st.subheader("Select parameters for ECLI citation search")
+        st.caption("Be aware of possible bias that may come from added parameters!")
+        
+        # Number of citations
+        st.session_state.search_params["num_citations"] = st.number_input(
+            "Number of total citations*",
+            min_value=1,
+            max_value=100,
+            value=st.session_state.search_params["num_citations"],
+            step=1
+        )
+        
+        # Court Decision
+        st.session_state.search_params["court_decision"] = st.selectbox(
+            "Court Decision (Guilty/Innocent/Irrelevant)*",
+            options=["Irrelevant", "Guilty", "Innocent"],
+            index=["Irrelevant", "Guilty", "Innocent"].index(
+                st.session_state.search_params["court_decision"]
+            )
+        )
+        
+        # Minimum Accuracy
+        st.session_state.search_params["min_accuracy"] = st.number_input(
+            "Minimum Accuracy (0%-100%)*",
+            min_value=0,
+            max_value=100,
+            value=st.session_state.search_params["min_accuracy"],
+            step=1
+        )
+        
+        # Additional requests
+        st.session_state.search_params["additional_requests"] = st.text_area(
+            "Any additional requests?",
+            value=st.session_state.search_params["additional_requests"],
+            placeholder="Quote only the numbered paragraphs",
+            height=100
+        )
+        
+        # Generate button
+        if st.button("Generate", type="primary", use_container_width=True):
+            save_parameters()
+    
+    else:
+        # Normal chat interface
+        prompt = st.chat_input("Say something")
+        if prompt:
+            st.write(f"User has sent the following prompt: {prompt}")
+            
+            # Here you would call your RAG backend with the parameters:
+            # Example:
+            # results = your_rag_function(
+            #     prompt=prompt,
+            #     letter_text=st.session_state.letter_text,
+            #     num_citations=st.session_state.search_params["num_citations"],
+            #     court_decision=st.session_state.search_params["court_decision"],
+            #     min_accuracy=st.session_state.search_params["min_accuracy"],
+            #     additional_requests=st.session_state.search_params["additional_requests"]
+            # )
+            
+            # Display parameters being used
+            st.info(f"Using parameters: {st.session_state.search_params}")
 
 with editor:
-
-    
     st.header("Editor")
     
-    # TODO: create your own component (upload button) because this is too big
+    # File uploader
     upload = st.file_uploader(
         label="Upload Letter", 
         accept_multiple_files=False, 
         type=".txt",
         key="txt_file",
         label_visibility="hidden",
-        on_change=load_file)
-
-
-    # Visual text area
-    letter_text = st.text_area(
-        label = "Editor", 
-        placeholder="Upload a legal advice letter", 
-        key=st.session_state.letter_text,
-        value = st.session_state.get("letter_text", ""),
-        label_visibility="hidden",
-        height=400)
+        on_change=load_file
+    )
     
-
-    download_col, preview_col = st.columns(2, vertical_alignment="bottom")
-
+    # Text area
+    letter_text = st.text_area(
+        label="Editor", 
+        placeholder="Upload a legal advice letter", 
+        value=st.session_state.get("letter_text", ""),
+        label_visibility="hidden",
+        height=400
+    )
+    
+    # Update session state if text is manually edited
+    if letter_text != st.session_state.letter_text:
+        st.session_state.letter_text = letter_text
+    
+    # Buttons row
+    download_col, preview_col, search_col = st.columns(3, vertical_alignment="bottom")
+    
     with download_col:
-        ## Download button
         st.download_button(
             label="Download text",
             data=letter_text, 
-            file_name="letter.txt", # in the future change
-            on_click="ignore",
+            file_name="letter.txt",
             type="primary",
             icon=":material/download:",
         )
-
-
+    
     with preview_col: 
-        ## Preview button 
-        # TODO: change icon to preview off if the file is not present
         preview = st.button(
-            label= "Preview PDF",
+            label="Preview PDF",
             type="primary",
             icon=":material/preview:"
+        )
+        
+        if preview:
+            st.info("Preview functionality to be implemented")
+    
+    with search_col:
+        # New button to trigger citation search
+        st.button(
+            label="Search Citations",
+            type="primary",
+            icon=":material/search:",
+            on_click=trigger_parameter_selection
         )
