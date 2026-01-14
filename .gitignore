@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Chroma Vector storage
+chroma_db/
+*/chroma_db/
+chroma/
+*/chroma/
+
+.DS_Store
