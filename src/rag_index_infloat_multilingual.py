@@ -9,6 +9,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from rag_pipeline_infloat_multilingual import PERSIST_DIR
 
 EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
+COLLECTION_NAME = "legal_rag"
 BM25_INDEX_PATH = Path("resources/legal_bm25_index.pkl")
 CORPUS_PATH = Path("resources/legal_corpus_docs.pkl")
 
@@ -27,7 +28,7 @@ def build_lexical_layer():
     )
 
     vector_store = Chroma(
-        collection_name="legal_rag",
+        collection_name=COLLECTION_NAME,
         embedding_function=embeddings,
         persist_directory=PERSIST_DIR
     )
