@@ -14,8 +14,5 @@ for i in range(len(case_numbers)):
         print(number)
         print(letter)
 
-    
     with open(file="data/letters/{}.txt".format(number), mode="w+") as f:
         f.write(letter)
-
-    
