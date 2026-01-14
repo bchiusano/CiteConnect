@@ -80,9 +80,31 @@ editor, info = st.columns(spec=[0.5, 0.5],
 with info:
     st.header("RAG")
 
+    # Always show chat interface first (unless in parameter form)
+    if not st.session_state.parameters_confirmed:
+        # Normal chat interface
+        prompt = st.chat_input("Say something")
+        if prompt:
+            st.write(f"User has sent the following prompt: {prompt}")
+
+            # Here you would call your RAG backend with the parameters:
+            # Example:
+            # results = your_rag_function(
+            #     prompt=prompt,
+            #     letter_text=st.session_state.letter_text,
+            #     num_citations=st.session_state.search_params["num_citations"],
+            #     court_decision=st.session_state.search_params["court_decision"],
+            #     min_accuracy=st.session_state.search_params["min_accuracy"],
+            #     additional_requests=st.session_state.search_params["additional_requests"]
+            # )
+
+            # Display parameters being used
+            st.info(f"Using parameters: {st.session_state.search_params}")
+
     # Check if we should show parameter selection
     if st.session_state.show_parameters and not st.session_state.parameters_confirmed:
         # Ask if user wants to add parameters
+        st.subheader("Add search parameters?")
         st.write("Would you like to specify parameters for the ECLI citation search?")
 
         col1, col2 = st.columns(2)
@@ -141,26 +163,6 @@ with info:
         #    on_click=generate_clicked
         # )
 
-    else:
-        # Normal chat interface
-        prompt = st.chat_input("Say something")
-        if prompt:
-            st.write(f"User has sent the following prompt: {prompt}")
-
-            # Here you would call your RAG backend with the parameters:
-            # Example:
-            # results = your_rag_function(
-            #     prompt=prompt,
-            #     letter_text=st.session_state.letter_text,
-            #     num_citations=st.session_state.search_params["num_citations"],
-            #     court_decision=st.session_state.search_params["court_decision"],
-            #     min_accuracy=st.session_state.search_params["min_accuracy"],
-            #     additional_requests=st.session_state.search_params["additional_requests"]
-            # )
-
-            # Display parameters being used
-            st.info(f"Using parameters: {st.session_state.search_params}")
-
 with editor:
     st.header("Editor")
 
@@ -173,11 +175,10 @@ with editor:
         label_visibility="hidden",
         on_change=load_file)
 
-    # Visual text area
+    # Visual text area - always enabled
     letter_text = st.text_area(
         label="Editor",
-        placeholder="Upload a legal advice letter",
-        key=st.session_state.letter_text,
+        placeholder="Upload a legal advice letter or type directly to begin...",
         value=st.session_state.get("letter_text", ""),
         label_visibility="hidden",
         height=400
@@ -187,35 +188,41 @@ with editor:
     if letter_text != st.session_state.letter_text:
         st.session_state.letter_text = letter_text
 
+    # Check if editor has content (from file OR manual typing)
+    has_content = st.session_state.letter_text.strip() != ""
+
     # Buttons row
     download_col, preview_col, search_col = st.columns(3, vertical_alignment="bottom")
 
     with download_col:
         st.download_button(
             label="Download text",
-            data=letter_text,
+            data=letter_text if has_content else "",
             file_name="letter.txt",
             type="primary",
             icon=":material/download:",
+            disabled=not has_content
         )
 
     with preview_col:
         preview = st.button(
             label="Preview PDF",
             type="primary",
-            icon=":material/preview:"
+            icon=":material/preview:",
+            disabled=not has_content
         )
 
-        if preview:
+        if preview and has_content:
             st.info("Preview functionality to be implemented")
 
     with search_col:
         # New button to trigger citation search
         st.button(
-            label="Search Citations",
+            label="Add Citations",
             type="primary",
             icon=":material/search:",
-            on_click=trigger_parameter_selection
+            on_click=trigger_parameter_selection,
+            disabled=not has_content
         )
 
 # if st.session_state.generate:
