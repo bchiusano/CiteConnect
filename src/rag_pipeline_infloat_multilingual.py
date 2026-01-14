@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 # Data paths
 DATA_DIR = "../data/"
 EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
+COLLECTION_NAME = "legal_rag"
 
 ecli_path = os.path.join(DATA_DIR, "DATA ecli_nummers juni 2025 v1 (version 1).xlsx")
 letters_path = os.path.join(DATA_DIR, "Dataset Advice letters on objections towing of bicycles.xlsx")

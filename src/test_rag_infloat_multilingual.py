@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import re
 import time
@@ -9,11 +10,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
 from langchain_core.documents import Document
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 # --- CONFIGURATION ---
 from rag_pipeline_infloat_multilingual import PERSIST_DIR, EMBEDDING_MODEL, COLLECTION_NAME, letters_path
 from resources.domain_config import DOMAIN_MAP, ACTIVE_DOMAIN
 from rag_index_infloat_multilingual import BM25_INDEX_PATH, CORPUS_PATH
-RERANK_MODEL = "ms-marco-MiniLM-L-6-v2"
+RERANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
 
 # --- PARAMETERS ---
 NUM_TEST_ROWS = 30 
@@ -31,7 +34,7 @@ class LegalRAGSystem:
         with open(BM25_INDEX_PATH, "rb") as f: self.bm25_model = pickle.load(f)
         with open(CORPUS_PATH, "rb") as f: self.legal_corpus = pickle.load(f)
         
-        # Using RERANK_TOP_N parameter here
+        cache_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'flashrank_cache'))
         self.reranker = FlashrankRerank(model=RERANK_MODEL, top_n=RERANK_TOP_N)
 
     def clean_ecli(self, text):
@@ -44,21 +47,29 @@ class LegalRAGSystem:
 
     def get_top_10_for_letter(self, letter_text, domain="bicycle"):
         """
-        UI METHOD: Takes a single letter and returns the best 10 ECLIs.
+        UI METHOD: Takes a single letter, splits into 5 issues, and returns best 10 ECLIs.
         """
         # 1. Prepare Domain Anchors
         keywords = DOMAIN_MAP.get(domain, {}).get("keywords", [])
         anchor = " ".join(keywords)
 
-        # 2. Paragraph Extraction
-        all_segments = [p.strip() for p in re.split(r'\n+', letter_text) if len(p.strip()) > 50]
-        claims = all_segments[2:12] if len(all_segments) > 5 else all_segments
+        # 2. Split FULL letter into exactly 5 claims/issues
+        # First, clean text and split into sentences (using a basic split for logic consistency)
+        sentences = [s.strip() for s in re.split(r'[.!?]\s+', letter_text) if len(s.strip()) > 10]
+        
+        num_issues = 5
+        if len(sentences) < num_issues:
+            claims = sentences
+        else:
+            # Divide sentences into 5 roughly equal chunks
+            chunk_size = len(sentences) // num_issues
+            claims = [" ".join(sentences[i * chunk_size : (i + 1) * chunk_size]) for i in range(num_issues)]
         
         ecli_scores = {} 
 
         for claim in claims:
             try:
-                # Query Expansion
+                # Query Expansion with anchor terms
                 enhanced_query = f"{anchor} {claim}"
                 
                 # Retrieval using SEARCH_K parameter
@@ -84,6 +95,7 @@ class LegalRAGSystem:
                 for r in refined:
                     ecli = self.clean_ecli(r.metadata.get('ecli_nummer', ''))
                     score = r.metadata.get('relevance_score', 0)
+                    # Keep the best score for an ECLI found across the 5 claims
                     if ecli not in ecli_scores or score > ecli_scores[ecli]:
                         ecli_scores[ecli] = score
             except: continue
@@ -105,8 +117,7 @@ class LegalRAGSystem:
 
     def run_evaluation(self, mode="full"):
         """
-        Runs full or partial test and calculates all IR metrics.
-        Uses NUM_TEST_ROWS and RANDOM_SEED for 'sample' mode.
+        Runs evaluation and calculates MRR and Recall@10.
         """
         print(f"--- STARTING EVALUATION MODE: {mode.upper()} (k={SEARCH_K}) ---")
         df = pd.read_excel(letters_path)
@@ -137,10 +148,10 @@ class LegalRAGSystem:
             metrics["reciprocal_ranks"].append(rank_score)
 
             # --- DETAILED PRINT FOR MONITORING ---
-            print(f"\nRow: {idx}")
-            print(f"Targets: {targets}")
-            print(f"Top 10 Found: {top_10}")
-            print(f"Hits: {len(hits)}/{len(targets)} | MRR: {rank_score:.4f}")
+            print(f"\nRow ID: {idx}")
+            print(f"Target ECLIs:  {targets}")
+            print(f"Top 10 Found:  {top_10}")
+            print(f"Result:        {len(hits)}/{len(targets)} hits | Rank Score: {rank_score:.4f}")
 
             results.append({
                 "row_id": idx,
@@ -152,7 +163,7 @@ class LegalRAGSystem:
             
             if len(results) % 5 == 0:
                 current_recall = metrics['hits_at_10'] / metrics['total_targets'] if metrics['total_targets'] > 0 else 0
-                print(f"\n>>> Progress: {len(results)}/{len(data)} | Running Recall@10: {current_recall:.2%}")
+                print(f"\n>>> PROGRESS: {len(results)}/{len(data)} | Current Recall@10: {current_recall:.2%}")
 
         # Final Summary
         final_recall = metrics["hits_at_10"] / metrics["total_targets"] if metrics['total_targets'] > 0 else 0
@@ -160,11 +171,11 @@ class LegalRAGSystem:
         
         print("\n" + "="*50)
         print(f"FINAL EVALUATION METRICS ({mode.upper()})")
-        print(f"Total Targets: {metrics['total_targets']}")
-        print(f"Total Hits@10: {metrics['hits_at_10']}")
-        print(f"Recall@10:     {final_recall:.4f}")
-        print(f"Final MRR:     {final_mrr:.4f}")
-        print(f"Total Time:    {(time.time()-start_time)/60:.2f} mins")
+        print(f"Total Targets:  {metrics['total_targets']}")
+        print(f"Total Hits@10:  {metrics['hits_at_10']}")
+        print(f"Final Recall@10: {final_recall:.4f}")
+        print(f"Final MRR:       {final_mrr:.4f}")
+        print(f"Total Time:     {(time.time()-start_time)/60:.2f} mins")
         print("="*50)
         
         pd.DataFrame(results).to_csv(f"eval_{mode}_results.csv", index=False)
@@ -173,6 +184,6 @@ class LegalRAGSystem:
 if __name__ == "__main__":
     rag = LegalRAGSystem()
     
-    # Use "sample" to verify logic, then switch to "full" for full run on 567 rows
+    # Verify with sample first, then switch to 'full'
     rag.run_evaluation(mode="sample") 
     # rag.run_evaluation(mode="full")
