@@ -1,14 +1,15 @@
 import streamlit as st
+from run_rag import LegalRAGSystem
 
 st.set_page_config(layout="wide")
 st.title("CiteConnect")
 
+# Initialize RAG class
+#rag = LegalRAGSystem()
+
 # Initialize session state variables
 if "letter_text" not in st.session_state:
     st.session_state.letter_text = ""
-
-# if "generate" not in st.session_state:
-#    st.session_state.generate = False
 
 if "show_parameters" not in st.session_state:
     st.session_state.show_parameters = False
@@ -24,6 +25,10 @@ if "search_params" not in st.session_state:
         "min_accuracy": 75,
         "additional_requests": ""
     }
+
+
+if "ecli_list" not in st.session_state:
+    st.session_state.ecli_list = []
 
 
 def load_file():
@@ -49,13 +54,7 @@ def decline_parameters():
     """Called when user declines to set parameters"""
     st.session_state.show_parameters = False
     st.session_state.parameters_confirmed = False
-    # Use default parameters and proceed with search
-    # TODO: Here you would call your RAG backend with default parameters
-    st.rerun()
-
-
-#def generate_clicked():
-#    st.session_state.generate = True
+    #st.rerun()
 
 
 def save_parameters():
@@ -63,8 +62,22 @@ def save_parameters():
     st.session_state.show_parameters = False
     st.session_state.parameters_confirmed = False
     # Parameters are already saved in session_state.search_params
-    # Here you would call your RAG backend with the saved parameters
-    st.rerun()
+
+    # TODO: add domain and other functions
+    # results = your_rag_function(
+    #     prompt=prompt,
+    #     letter_text=st.session_state.letter_text,
+    #     num_citations=st.session_state.search_params["num_citations"],
+    #     court_decision=st.session_state.search_params["court_decision"],
+    #     min_accuracy=st.session_state.search_params["min_accuracy"],
+    #     additional_requests=st.session_state.search_params["additional_requests"]
+    # )
+    print("LETTER TEXT: ", st.session_state.letter_text)
+    print("Initialising rag")
+    rag = LegalRAGSystem()
+    st.session_state.ecli_list = rag.get_top_10_for_letter(st.session_state.letter_text)
+    print("ECLI'S: ", st.session_state.ecli_list)
+    #st.rerun()
 
 
 # Create columns
@@ -157,11 +170,6 @@ with info:
         if st.button("Generate", type="primary", use_container_width=True):
             save_parameters()
 
-        # generate_button = st.button(
-        #    label="Generate!",
-        #    type="primary",
-        #    on_click=generate_clicked
-        # )
 
 with editor:
     st.header("Editor")
@@ -224,8 +232,3 @@ with editor:
             on_click=trigger_parameter_selection,
             disabled=not has_content
         )
-
-# if st.session_state.generate:
-# this part is kept in the state
-# generating citations for the text
-# st.write("Generating citations for: ", st.session_state.letter_text)
