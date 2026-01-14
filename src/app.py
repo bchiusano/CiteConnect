@@ -50,7 +50,7 @@ def decline_parameters():
     st.session_state.show_parameters = False
     st.session_state.parameters_confirmed = False
     # Use default parameters and proceed with search
-    # Here you would call your RAG backend with default parameters
+    # TODO: Here you would call your RAG backend with default parameters
     st.rerun()
 
 
