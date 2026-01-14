@@ -5,8 +5,8 @@ import pandas as pd
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma  
-from langchain_core.documents import Document  
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 
 # Data paths
 DATA_DIR = "../data/"
@@ -21,27 +21,29 @@ PERSIST_DIR = "resources/chroma_db_infloat_multilingual"
 # Global placeholder for embeddings object (set by create_embeddings)
 embeddings = None
 
+
 def load_data_and_prepare_documents():
     """Load Excel files and prepare Document objects for ALL texts."""
     df_ecli = pd.read_excel(ecli_path)
-    
+
     # REMOVED: bicycle_keywords filter is gone to ensure a general-purpose database
-    
+
     print(f"Total ECLI cases being indexed: {len(df_ecli)}")
-    
+
     ecli_texts = df_ecli['ecli_tekst'].astype(str).tolist()
 
     case_docs = [
         Document(
-            page_content=f"passage: {text}", 
+            page_content=f"passage: {text}",
             metadata={
-                "source": "case", 
+                "source": "case",
                 "ecli_nummer": str(df_ecli.iloc[i]["ecli_nummer"]).replace("ECLI:", "").strip()
             }
         )
         for i, text in enumerate(ecli_texts)
     ]
     return case_docs
+
 
 # Create a text splitter
 # chunk_size = maximum number of characters per chunk
@@ -51,7 +53,7 @@ def split_documents(all_docs, chunk_size=800, chunk_overlap=150):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ".", " ", ""] # Prioritize paragraph/line breaks
+        separators=["\n\n", "\n", ".", " ", ""]  # Prioritize paragraph/line breaks
     )
 
     # Split all documents (ECLI cases + Advice letters) into smaller chunks
@@ -68,6 +70,7 @@ def split_documents(all_docs, chunk_size=800, chunk_overlap=150):
         print(split_docs[0].metadata)
 
     return split_docs
+
 
 # Create Embeddings
 # Purpose: Convert each text chunk into a numeric vector (embedding) that captures its semantic meaning
@@ -89,7 +92,7 @@ def create_embeddings(split_docs, model_name):
         model_name=model_name,
         model_kwargs={'device': 'mps'},
         encode_kwargs={'normalize_embeddings': True},
-        show_progress=True 
+        show_progress=True
     )
 
     # Test on the first chunk to confirm model works
@@ -105,6 +108,7 @@ def create_embeddings(split_docs, model_name):
             print("Warning: embedding test failed:", e)
 
     return embeddings
+
 
 # Create Chroma vector store from split documents
 # Purpose: Store embeddings of all document chunks for fast similarity search
@@ -146,12 +150,13 @@ def create_vector_store_prev(documents, persist_directory=PERSIST_DIR):
 
     return vector_store
 
+
 def create_vector_store(documents, persist_directory=PERSIST_DIR):
     start = time.time()
     os.makedirs(persist_directory, exist_ok=True)
 
     # 1. Initialize the store
-    print("Creating vector store..") 
+    print("Creating vector store..")
     vector_store = Chroma(
         collection_name="legal_rag",
         embedding_function=embeddings,
@@ -163,10 +168,10 @@ def create_vector_store(documents, persist_directory=PERSIST_DIR):
     # 2. Add documents 
     print("Adding documents to vector store...")
     # Add documents in chunks of 500 to stay well under the 5461 limit
-    step = 500 
+    step = 500
     for i in range(0, len(documents), step):
-        batch = documents[i : i + step]
-        print(f"Adding batch {i//step + 1}...")
+        batch = documents[i: i + step]
+        print(f"Adding batch {i // step + 1}...")
         vector_store.add_documents(batch)
     print("--- SUCCESS: Documents added ---")
     print(f"Time taken: {time.time() - start:.2f} seconds")
@@ -190,6 +195,7 @@ def create_vector_store(documents, persist_directory=PERSIST_DIR):
     print(f"Vector store saved at: {persist_directory}")
 
     return vector_store
+
 
 def load_vector_store(persist_directory=PERSIST_DIR):
     """Load an existing Chroma vector store."""
@@ -227,6 +233,7 @@ def update_vector_store(new_documents, persist_directory=PERSIST_DIR):
 
     return vector_store
 
+
 def main():
     # Load and prepare documents
     all_docs = load_data_and_prepare_documents()
@@ -241,10 +248,11 @@ def main():
     create_vector_store(split_docs)
 
     # Example: load the store
-    #store = load_vector_store()
+    # store = load_vector_store()
 
     # To update the store with new docs
-    #update_vector_store(new_docs)
+    # update_vector_store(new_docs)
+
 
 if __name__ == "__main__":
     main()
