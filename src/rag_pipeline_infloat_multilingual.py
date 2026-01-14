@@ -10,6 +10,7 @@ from langchain_core.documents import Document
 
 # Data paths
 DATA_DIR = "../data/"
+EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 
 ecli_path = os.path.join(DATA_DIR, "DATA ecli_nummers juni 2025 v1 (version 1).xlsx")
 letters_path = os.path.join(DATA_DIR, "Dataset Advice letters on objections towing of bicycles.xlsx")
@@ -234,8 +235,7 @@ def main():
     split_docs = split_documents(all_docs)
 
     # Create embeddings 
-    embedding_model = "intfloat/multilingual-e5-large"
-    create_embeddings(split_docs, model_name=embedding_model)
+    create_embeddings(split_docs, model_name=EMBEDDING_MODEL)
 
     # Create/persist Chroma vector store
     create_vector_store(split_docs)
