@@ -8,8 +8,9 @@ In legal advice letters, lawyers frequently reference case law using ECLI citati
 Run the following command:
 
 ```python
-pip install pandas openpyxl langchain langchain-classic langchain-chroma langchain-text-splitters langchain-huggingface langchain-community chromadb openai sentence-transformers tiktoken huggingface_hub flashrank
+pip install pandas openpyxl langchain langchain-classic langchain-chroma langchain-text-splitters langchain-huggingface langchain-community chromadb openai sentence-transformers tiktoken huggingface_hub flashrank rank-bm25 nlp spacy
 ```
-pip install rank-bm25
 
-
+```python
+python -m spacy download nl_core_news_md
+```
