@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import pandas as pd
+import platform
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -17,10 +18,24 @@ ecli_path = os.path.join(DATA_DIR, "DATA ecli_nummers juni 2025 v1 (version 1).x
 letters_path = os.path.join(DATA_DIR, "Dataset Advice letters on objections towing of bicycles.xlsx")
 
 # Directory to persist Chroma database
-PERSIST_DIR = "resources/chroma_db_infloat_multilingual"
+PERSIST_DIR = os.path.join("resources", "chroma_db_infloat_multilingual")
 
 # Global placeholder for embeddings object (set by create_embeddings)
 embeddings = None
+
+
+def get_device():
+    """Automatically detect the best available device for the current platform."""
+    if platform.system() == "Darwin":  # macOS
+        return "mps"
+    elif platform.system() == "Windows":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+        except ImportError:
+            pass
+    return "cpu"
 
 
 def load_data_and_prepare_documents():
@@ -83,15 +98,15 @@ def create_embeddings(split_docs, model_name):
     """
     global embeddings
 
+    device = get_device()
     print("Initializing embeddings model...")
     print(f"Using model: {model_name}")
+    print(f"Using device: {device}")
 
-    # Initialize embeddings
-    # embeddings = HuggingFaceEmbeddings(model_name=model_name)
-    # Below one is specific to 'clips/e5-large-trm-nl' model
+    # Initialize embeddings with auto-detected device
     embeddings = HuggingFaceEmbeddings(
         model_name=model_name,
-        model_kwargs={'device': 'mps'},
+        model_kwargs={'device': device},
         encode_kwargs={'normalize_embeddings': True},
         show_progress=True
     )

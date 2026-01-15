@@ -3,6 +3,7 @@ import sys
 import pickle
 import re
 import time
+import platform
 import pandas as pd
 import numpy as np
 from langchain_chroma import Chroma
@@ -24,6 +25,20 @@ RANDOM_SEED = 40
 SEARCH_K = 400       
 RERANK_TOP_N = 60    
 CANDIDATE_LIMIT = 100
+
+
+def get_device():
+    """Automatically detect the best available device for the current platform."""
+    if platform.system() == "Darwin":  # macOS
+        return "mps"
+    elif platform.system() == "Windows":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+        except ImportError:
+            pass
+    return "cpu"
 
 
 def _rrf_fusion(v_hits, b_hits, k=60):
@@ -50,11 +65,23 @@ def clean_ecli(text):
 class LegalRAGSystem:
     def __init__(self):
         print("Initializing Engines...")
-        self.embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL, model_kwargs={'device': 'mps'})
-        self.db = Chroma(collection_name=COLLECTION_NAME, persist_directory=PERSIST_DIR, embedding_function=self.embeddings)
+        device = get_device()
+        print(f"Using device: {device}")
         
-        with open(BM25_INDEX_PATH, "rb") as f: self.bm25_model = pickle.load(f)
-        with open(CORPUS_PATH, "rb") as f: self.legal_corpus = pickle.load(f)
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL, 
+            model_kwargs={'device': device}
+        )
+        self.db = Chroma(
+            collection_name=COLLECTION_NAME, 
+            persist_directory=PERSIST_DIR, 
+            embedding_function=self.embeddings
+        )
+        
+        with open(BM25_INDEX_PATH, "rb") as f: 
+            self.bm25_model = pickle.load(f)
+        with open(CORPUS_PATH, "rb") as f: 
+            self.legal_corpus = pickle.load(f)
         
         cache_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'flashrank_cache'))
         self.reranker = FlashrankRerank(model=RERANK_MODEL, top_n=RERANK_TOP_N)
@@ -112,7 +139,8 @@ class LegalRAGSystem:
                     # Keep the best score for an ECLI found across the 5 claims
                     if ecli not in ecli_scores or score > ecli_scores[ecli]:
                         ecli_scores[ecli] = score
-            except: continue
+            except: 
+                continue
 
         # Sort and return top 10
         sorted_eclis = sorted(ecli_scores.items(), key=lambda x: x[1], reverse=True)

@@ -1,6 +1,7 @@
 import os
 import pickle
 import re
+import platform
 from pathlib import Path
 from rank_bm25 import BM25Okapi
 from langchain_chroma import Chroma
@@ -10,8 +11,22 @@ from rag_pipeline_infloat_multilingual import PERSIST_DIR
 
 EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 COLLECTION_NAME = "legal_rag"
-BM25_INDEX_PATH = Path("resources/legal_bm25_index.pkl")
-CORPUS_PATH = Path("resources/legal_corpus_docs.pkl")
+BM25_INDEX_PATH = Path("resources") / "legal_bm25_index.pkl"
+CORPUS_PATH = Path("resources") / "legal_corpus_docs.pkl"
+
+
+def get_device():
+    """Automatically detect the best available device for the current platform."""
+    if platform.system() == "Darwin":  # macOS
+        return "mps"
+    elif platform.system() == "Windows":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+        except ImportError:
+            pass
+    return "cpu"
 
 
 def build_lexical_layer():
@@ -21,11 +36,14 @@ def build_lexical_layer():
     """
     print(f"⚡ Loading existing Chroma DB from: {PERSIST_DIR}")
 
+    device = get_device()
+    print(f"Using device: {device}")
+
     # We initialize embeddings just to access the existing collection
     # but we won't be generating any new vectors.
     embeddings = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL,
-        model_kwargs={'device': 'mps'}
+        model_kwargs={'device': device}
     )
 
     vector_store = Chroma(
@@ -57,6 +75,10 @@ def build_lexical_layer():
     # 4. Save the Index and a "Reference Corpus" to disk
     # We save a simplified version of the corpus so the search script 
     # can return text even if it only uses the BM25 index.
+    
+    # Ensure resources directory exists
+    os.makedirs("resources", exist_ok=True)
+    
     print(f"💾 Saving BM25 index to {BM25_INDEX_PATH}...")
     with open(BM25_INDEX_PATH, "wb") as f:
         pickle.dump(bm25, f)
