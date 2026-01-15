@@ -2,7 +2,7 @@ import pandas as pd
 
 DEBUG = False
 
-excel_df =pd.read_excel("data/Dataset Advice letters on objections towing of bicycles.xlsx")
+excel_df =pd.read_excel("../data/Dataset Advice letters on objections towing of bicycles.xlsx")
 letters = excel_df['geanonimiseerd_doc_inhoud']
 case_numbers = excel_df['Octopus zaaknummer']
 

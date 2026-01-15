@@ -1,5 +1,6 @@
 import streamlit as st
 from run_rag import LegalRAGSystem
+import pandas as pd
 
 st.set_page_config(layout="wide")
 st.title("CiteConnect")
@@ -11,8 +12,15 @@ def get_rag_instance():
     return LegalRAGSystem()
 
 
+@st.cache_resource
+def get_ecli_data():
+    df = pd.read_excel("../data/DATA ecli_nummers juni 2025 v1 (version 1).xlsx")
+    return df.set_index('ecli_nummer')
+
+
 # Get the cached instance
 rag = get_rag_instance()
+ecli_df = get_ecli_data()
 
 # Initialize session state variables
 if "letter_text" not in st.session_state:
@@ -51,7 +59,7 @@ def load_file():
 def trigger_parameter_selection():
     """Called when user clicks 'Search Citations' button"""
     st.session_state.show_parameters = True
-    st.session_state.parameters_confirmed = False
+    # st.session_state.parameters_confirmed = False
 
 
 def confirm_parameters():
@@ -62,7 +70,7 @@ def confirm_parameters():
 def decline_parameters():
     """Called when user declines to set parameters"""
     st.session_state.show_parameters = False
-    st.session_state.parameters_confirmed = False
+    # st.session_state.parameters_confirmed = False
     # st.rerun() # is this necessary?
 
 
@@ -92,24 +100,50 @@ def save_parameters():
     st.rerun()
 
 
+def accept_ecli_selection():
+    selected = [ref for ref, choice in st.session_state.selected_ecli.items() if choice == True]
+
+    if selected:
+        # if there is at least one ecli selected
+        st.session_state.letter_text += f"\n{', '.join(selected)}"
+
+
 # Create columns
 editor, info = st.columns(spec=[0.5, 0.5],
                           gap="medium",
                           vertical_alignment="top",
                           border=True)
 
+
+def fetch_description(number):
+    # assumes that the ecli numbers are unique
+    return ecli_df.loc[f"ECLI:{number}", 'ecli_tekst']
+
+
 with info:
     st.header("RAG")
 
-    # Always show chat interface first (unless in parameter form)
-    if not st.session_state.parameters_confirmed:
-        # Normal chat interface
-        prompt = st.chat_input("Say something")
-        if prompt:
-            st.write(f"User has sent the following prompt: {prompt}")
+    # TODO: for button background colour (currently not working)
+    st.markdown("""
+            <style>
+            /* Green for Select buttons */
+            button[key^="yes_"] {
+                background-color: #4CAF50 !important;
+                color: white !important;
+            </style>
+            """, unsafe_allow_html=True)
 
-            # Display parameters being used
-            st.info(f"Using parameters: {st.session_state.search_params}")
+    # Always show chat interface first (unless in parameter form)
+
+    # if not st.session_state.parameters_confirmed:
+    # Normal chat interface
+
+    # prompt = st.chat_input("Say something")
+    # if prompt:
+    #     st.write(f"User has sent the following prompt: {prompt}")
+
+    # Display parameters being used
+    #     st.info(f"Using parameters: {st.session_state.search_params}")
 
     # Check if we should show parameter selection
     if st.session_state.show_parameters and not st.session_state.parameters_confirmed:
@@ -172,9 +206,12 @@ with info:
 
         ecli_list = st.session_state.ecli_list
 
+        descriptions = {}
+
         for ecli in ecli_list:
 
             # fetching the descriptions of the ecli from data
+            descriptions[ecli] = fetch_description(ecli)
 
             # select functionality for session state
             if ecli not in st.session_state.selected_ecli:
@@ -183,14 +220,25 @@ with info:
             ecli_name, buttons = st.columns([8, 1])  # 8:1 ratio
 
             with ecli_name:
+                # user can expand to see the description of the ecli
                 with st.expander(
                         f"{'✅' if st.session_state.selected_ecli[ecli] == True else '❌'} {ecli}"):
-                    st.write("description")
+                    if descriptions[ecli]:
+                        st.write(descriptions[ecli])
 
             with buttons:
                 if st.button("✓", key=f"yes_{ecli}"):
                     st.session_state.selected_ecli[ecli] = True
                     st.rerun()
+
+        change_params, regenerate, accept = st.columns(3)
+        with change_params:
+            st.button("Update Parameters", type='primary')  # TODO
+        with regenerate:
+            st.button("Regenerate", type='primary')     # TODO
+        with accept:
+            st.button("Accept", type='primary', on_click=accept_ecli_selection)
+
 
 with editor:
     st.header("Editor")
