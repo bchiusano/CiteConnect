@@ -1,5 +1,6 @@
 import streamlit as st
-from run_rag import LegalRAGSystem
+# from run_rag import LegalRAGSystem
+from test_rag_infloat_multilingual import LegalRAGSystem
 import pandas as pd
 import re
 
@@ -88,7 +89,7 @@ def save_parameters():
     st.session_state.parameters_confirmed = False
 
     st.session_state.ecli_list = rag.get_top_10_for_letter(st.session_state.letter_text)
-
+    print(st.session_state.ecli_list)
     st.rerun()
 
 

@@ -55,6 +55,13 @@ except:
     nlp = spacy.load("nl_core_news_sm")
 
 
+def clean_ecli(text):
+    if pd.isna(text) or str(text).lower() == 'nan': return ""
+    cleaned = str(text).upper().replace("ECLI:", "").strip()
+    cleaned = re.sub(r'[^A-Z0-9:]', '', cleaned)
+    return cleaned
+
+
 class LegalRAGSystem:
     def __init__(self):
         print("Initializing Engines...")
@@ -82,13 +89,6 @@ class LegalRAGSystem:
             model=RERANK_MODEL, top_n=RERANK_TOP_N
         )
 
-
-    def clean_ecli(self, text):
-        if pd.isna(text) or str(text).lower() == 'nan': return ""
-        cleaned = str(text).upper().replace("ECLI:", "").strip()
-        cleaned = re.sub(r'[^A-Z0-9:]', '', cleaned)
-        return cleaned
-
     def get_top_10_for_letter(self, letter_text, domain="bicycle"):
         keywords = DOMAIN_MAP.get(domain, {}).get("keywords", [])
         anchor = " ".join(keywords)
@@ -112,9 +112,9 @@ class LegalRAGSystem:
                 # 3. Hybrid Fusion (0.7 / 0.3)
                 fused = self._rrf_fusion(v_hits, b_hits)
 
-                candidate_map = {self.clean_ecli(d.metadata['ecli_nummer']): d for d in v_hits}
+                candidate_map = {clean_ecli(d.metadata['ecli_nummer']): d for d in v_hits}
                 for d in b_hits:
-                    eid = self.clean_ecli(d['metadata'].get('ecli_nummer'))
+                    eid = clean_ecli(d['metadata'].get('ecli_nummer'))
                     if eid not in candidate_map:
                         candidate_map[eid] = Document(page_content=d['content'], metadata=d['metadata'])
 
@@ -129,7 +129,7 @@ class LegalRAGSystem:
                     refined = self.reranker.compress_documents(docs_to_rerank, issue_text)
 
                     for r in refined:
-                        ecli = self.clean_ecli(r.metadata.get('ecli_nummer', ''))
+                        ecli = clean_ecli(r.metadata.get('ecli_nummer', ''))
                         rerank_score = r.metadata.get('relevance_score', 0)
 
                         # Find original hybrid score
@@ -151,10 +151,10 @@ class LegalRAGSystem:
         scores = {}
         # 0.7 Semantic / 0.3 Keyword split
         for r, d in enumerate(v_hits):
-            eid = self.clean_ecli(d.metadata.get('ecli_nummer'))
+            eid = clean_ecli(d.metadata.get('ecli_nummer'))
             scores[eid] = scores.get(eid, 0) + 0.7 * (1 / (r + k))
         for r, d in enumerate(b_hits):
-            eid = self.clean_ecli(d['metadata'].get('ecli_nummer'))
+            eid = clean_ecli(d['metadata'].get('ecli_nummer'))
             scores[eid] = scores.get(eid, 0) + 0.3 * (1 / (r + k))
         return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
@@ -181,11 +181,11 @@ class LegalRAGSystem:
 
         for idx, row in data.iterrows():
             # 1. Prepare standardized targets
-            targets = [self.clean_ecli(e) for e in str(row['ECLI']).replace(';', ',').split(',') if self.clean_ecli(e)]
+            targets = [clean_ecli(e) for e in str(row['ECLI']).replace(';', ',').split(',') if clean_ecli(e)]
 
             # 2. Retrieval using the Issues-Based strategy
             found_raw = self.get_top_10_for_letter(str(row['geanonimiseerd_doc_inhoud']), ACTIVE_DOMAIN)
-            top_10 = [self.clean_ecli(f) for f in found_raw]
+            top_10 = [clean_ecli(f) for f in found_raw]
 
             # 3. Calculate Row Metrics
             hits = [t for t in targets if t in top_10]
@@ -237,10 +237,10 @@ class LegalRAGSystem:
 
         print("\n" + "=" * 50)
         print(f"FINAL EVALUATION METRICS (SEED: {RANDOM_SEED})")
-        print(f"Recall@10 (Accuracy): {final_recall:.4f} ({final_recall*100:.2f}%)")
-        print(f"Precision@10:         {final_precision:.4f} ({final_precision*100:.2f}%)")
+        print(f"Recall@10 (Accuracy): {final_recall:.4f} ({final_recall * 100:.2f}%)")
+        print(f"Precision@10:         {final_precision:.4f} ({final_precision * 100:.2f}%)")
         print(f"MRR:                  {final_mrr:.4f}")
-        print(f"Total Evaluation Time: {(time.time()-start_time)/60:.2f} mins")
+        print(f"Total Evaluation Time: {(time.time() - start_time) / 60:.2f} mins")
         print("=" * 50)
 
         # Save detailed results to CSV
