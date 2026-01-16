@@ -359,7 +359,7 @@ with info:
         ecli_list = st.session_state.ecli_list
         descriptions = {}
 
-        for ecli in ecli_list:
+        for ecli, relevance_score in ecli_list:
             # fetching the descriptions of the ecli from data
             descriptions[ecli] = fetch_description(ecli)
 
@@ -372,7 +372,7 @@ with info:
             with ecli_name:
                 # user can expand to see the description of the ecli
                 with st.expander(
-                        f"{'✅' if st.session_state.selected_ecli[ecli] == True else '❌'} {ecli}"):
+                        f"{'✅' if st.session_state.selected_ecli[ecli] == True else '❌'} {ecli} (**Score**: {relevance_score:.3f})"):
                     if descriptions[ecli]:
                         st.write(descriptions[ecli])
 
