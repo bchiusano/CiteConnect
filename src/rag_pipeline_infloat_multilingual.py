@@ -139,7 +139,7 @@ def create_vector_store_prev(documents, persist_directory=PERSIST_DIR):
     vector_store = Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
-        collection_name="legal_rag",
+        collection_name=COLLECTION_NAME,
         persist_directory=persist_directory,
         collection_metadata={"hnsw:space": "cosine"}
     )
@@ -174,7 +174,7 @@ def create_vector_store(documents, persist_directory=PERSIST_DIR):
     # 1. Initialize the store
     print("Creating vector store..")
     vector_store = Chroma(
-        collection_name="legal_rag",
+        collection_name=COLLECTION_NAME,
         embedding_function=embeddings,
         persist_directory=persist_directory,
         collection_metadata={"hnsw:space": "cosine"}
@@ -216,7 +216,7 @@ def create_vector_store(documents, persist_directory=PERSIST_DIR):
 def load_vector_store(persist_directory=PERSIST_DIR):
     """Load an existing Chroma vector store."""
     vector_store = Chroma(
-        collection_name="legal_rag",
+        collection_name=COLLECTION_NAME,
         embedding_function=embeddings,
         persist_directory=persist_directory
     )
