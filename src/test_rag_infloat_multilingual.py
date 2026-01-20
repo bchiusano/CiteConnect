@@ -21,7 +21,9 @@ from rag_pipeline_infloat_multilingual import PERSIST_DIR, EMBEDDING_MODEL, COLL
 from resources.domain_config import DOMAIN_MAP, ACTIVE_DOMAIN
 from rag_index_infloat_multilingual import BM25_INDEX_PATH, CORPUS_PATH
 
-RERANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
+#RERANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
+RERANK_MODEL = "ms-marco-MiniLM-L-12-v2"
+
 
 # --- PARAMETERS ---
 NUM_TEST_ROWS = 30
@@ -185,6 +187,7 @@ class LegalRAGSystem:
 
             # 2. Retrieval using the Issues-Based strategy
             found_raw = self.get_top_10_for_letter(str(row['geanonimiseerd_doc_inhoud']), ACTIVE_DOMAIN)
+            # TODO: fix because output for top 10 changed
             top_10 = [clean_ecli(f) for f in found_raw]
 
             # 3. Calculate Row Metrics
