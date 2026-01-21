@@ -1,0 +1,41 @@
+# Install all required packages for the RAG system
+# Run this cell first, then restart kernel if needed
+
+import sys
+import subprocess
+
+packages = [
+    "flagembedding",
+    "sentence-transformers",
+    "spacy",
+    "pandas",
+    "openpyxl",
+    "numpy",
+    "tqdm",
+    "psycopg2-binary",
+    "sqlalchemy",
+    "elasticsearch",
+    "python-docx"
+]
+
+# Environment Setup
+
+This document lists the minimal system and software requirements
+needed to run this RAG project.
+
+---
+
+## 1. Python
+
+- Python >= 3.10
+- Recommended: virtualenv or conda
+
+---
+
+## 2. Python Dependencies
+
+Install required packages:
+
+```bash
+pip install -r requirements.txt
+```
