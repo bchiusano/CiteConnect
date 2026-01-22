@@ -145,7 +145,8 @@ class LegalRAGSystem:
             except:
                 continue
         print()
-        return [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)[:10]]
+        #return [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)[:10]]
+        return [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)]
 
     def _rrf_fusion(self, v_hits, b_hits, k=60):
         scores = {}

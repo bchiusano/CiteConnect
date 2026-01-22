@@ -29,10 +29,10 @@ if "letter_text" not in st.session_state:
     st.session_state.letter_text = ""
 
 if "show_parameters" not in st.session_state:
-    st.session_state.show_parameters = False
+    st.session_state.show_parameters = True
 
-if "parameters_confirmed" not in st.session_state:
-    st.session_state.parameters_confirmed = False
+# if "parameters_confirmed" not in st.session_state:
+#    st.session_state.parameters_confirmed = False
 
 # Store the actual parameters
 if "search_params" not in st.session_state:
@@ -66,6 +66,10 @@ if "chat_selected_ecli" not in st.session_state:
     st.session_state.chat_selected_ecli = {}
 
 
+# Check if editor has content (from file OR manual typing)
+has_content = st.session_state.letter_text.strip() != ""
+
+
 def load_file():
     """Load uploaded file into session state"""
     file = st.session_state['txt_file']
@@ -79,20 +83,10 @@ def trigger_parameter_selection():
     st.session_state.show_parameters = True
 
 
-def confirm_parameters():
-    """Called when user confirms they want to set parameters"""
-    st.session_state.parameters_confirmed = True
-
-
-def decline_parameters():
-    """Called when user declines to set parameters"""
-    st.session_state.show_parameters = False
-
-
 def save_parameters():
     """Called when user clicks Generate button"""
     st.session_state.show_parameters = False
-    st.session_state.parameters_confirmed = False
+    # st.session_state.parameters_confirmed = False
 
     # resetting this to 0 if the parameters where changed and saved
     st.session_state.ecli_index_display = 0
@@ -248,95 +242,11 @@ editor, info = st.columns(spec=[0.5, 0.5],
 
 
 with info:
-    st.header("Search Legal Cases")
+    st.header("Search ECLI Citations")
 
-    # Check if we're in citation mode (showing ECLI list or parameter form)
-    in_citation_mode = (st.session_state.show_parameters or 
-                       st.session_state.parameters_confirmed or 
-                       len(st.session_state.ecli_list) > 0)
-
-    if not in_citation_mode:
-        # SEARCH INTERFACE - Only show when NOT in citation mode
-        st.markdown("### 💬 Ask about legal cases")
-        st.caption("Search our database of legal decisions by asking questions in natural language.")
-        
-        # Display chat history
-        for msg in st.session_state.chat_messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-                
-                # If this is an assistant message with results, show the ECLI cards
-                if msg["role"] == "assistant" and "eclis" in msg:
-                    st.markdown("---")
-                    for ecli in msg["eclis"]:
-                        # Create expandable card for each ECLI (no selection functionality)
-                        with st.expander(f"📋 **{ecli}**", expanded=False):
-                            # Show brief overview instead of full text
-                            overview = get_case_overview(ecli, max_sentences=3)
-                            st.write(overview)
-                            
-                            # Option to see full text
-                            if st.button("📄 View Full Case", key=f"full_{ecli}_{msg['timestamp']}"):
-                                full_text = fetch_description(ecli)
-                                st.text_area("Full Case Text", full_text, height=300, key=f"fulltext_{ecli}_{msg['timestamp']}")
-        
-        # Chat input
-        user_query = st.chat_input("Ask a question about legal cases...")
-        
-        if user_query:
-            # Add user message to chat
-            import time
-            timestamp = time.time()
-            st.session_state.chat_messages.append({
-                "role": "user",
-                "content": user_query,
-                "timestamp": timestamp
-            })
-            
-            # Perform search
-            with st.spinner("Searching legal database..."):
-                results = search_database(user_query)
-            
-            # Create response message
-            if results:
-                response = f"I found **{len(results)} relevant cases** for your query:\n\n"
-                
-                # Generate and add summary paragraph
-                summary = generate_summary_paragraph(results)
-                if summary:
-                    response += f"{summary}\n\n"
-                
-                response += "*Click on any case below to see more details.*"
-            else:
-                response = "I couldn't find any relevant cases for your query. Try rephrasing or using different terms."
-            
-            # Add assistant message to chat
-            st.session_state.chat_messages.append({
-                "role": "assistant",
-                "content": response,
-                "eclis": results,
-                "timestamp": timestamp
-            })
-            
-            st.rerun()
-        
-        # No action buttons needed since we removed selection functionality
-
-    # CITATION MODE INTERFACES
-    elif st.session_state.show_parameters and not st.session_state.parameters_confirmed:
-        # Ask if user wants to add parameters
-        st.subheader("Add search parameters?")
-        st.write("Would you like to specify parameters for the ECLI citation search?")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.button("Yes", on_click=confirm_parameters, type="primary", use_container_width=True)
-        with col2:
-            st.button("No", on_click=decline_parameters, use_container_width=True)
-
-    elif st.session_state.parameters_confirmed:
+    if st.session_state.show_parameters:
         # Show parameter form
-        st.subheader("Select parameters for ECLI citation search")
+        st.subheader("Select parameters for search:")
         st.caption("Be aware of possible bias that may come from added parameters.")
 
         # Number of citations
@@ -348,16 +258,6 @@ with info:
             step=1
         )
 
-        # Court Decision
-        # TODO: check how to integrate this
-        #st.session_state.search_params["court_decision"] = st.selectbox(
-        #    "Court Decision (Guilty/Innocent/Irrelevant)*",
-        #    options=["Irrelevant", "Guilty", "Innocent"],
-        #    index=["Irrelevant", "Guilty", "Innocent"].index(
-        #        st.session_state.search_params["court_decision"]
-        #    )
-        #)
-
         # Minimum Accuracy
         st.session_state.search_params["min_accuracy"] = st.number_input(
             "Minimum Accuracy (0%-100%)*",
@@ -368,7 +268,7 @@ with info:
         )
 
         # Generate button
-        if st.button("Generate", type="primary", use_container_width=True):
+        if st.button("Generate", type="primary", use_container_width=True, disabled=not has_content):
             save_parameters()
 
     # Display citation results
@@ -389,7 +289,7 @@ with info:
             with ecli_name:
                 # user can expand to see the description of the ecli
                 with st.expander(
-                        f"{'✅' if st.session_state.selected_ecli[ecli] == True else '❌'} {ecli} (**Score**: {relevance_score:.3f})"):
+                        f"{'✅' if st.session_state.selected_ecli[ecli] == True else '❌'} {ecli} (**Score**: {relevance_score*100:.3f}%)"):
                     if descriptions[ecli]:
                         st.write(descriptions[ecli])
 
@@ -405,7 +305,7 @@ with info:
                 st.session_state.ecli_list = []
                 st.session_state.selected_ecli = {}
                 st.session_state.show_parameters = True
-                st.session_state.parameters_confirmed = True
+                # st.session_state.parameters_confirmed = True
                 st.rerun()
 
         with regenerate:
@@ -427,6 +327,7 @@ with info:
         with accept:
             if st.button("Accept", type='primary', on_click=accept_ecli_selection):
                 # Clear citation mode
+                st.session_state.show_parameters = True
                 st.session_state.ecli_list = []
                 st.session_state.selected_ecli = {}
                 st.rerun()
@@ -457,11 +358,9 @@ with editor:
     if letter_text != st.session_state.letter_text:
         st.session_state.letter_text = letter_text
 
-    # Check if editor has content (from file OR manual typing)
-    has_content = st.session_state.letter_text.strip() != ""
 
     # Buttons row
-    download_col, preview_col, search_col = st.columns(3, vertical_alignment="bottom")
+    download_col, preview_col = st.columns(2, vertical_alignment="bottom")
 
     with download_col:
         st.download_button(
@@ -483,13 +382,3 @@ with editor:
 
         if preview and has_content:
             st.info("Preview functionality to be implemented")
-
-    with search_col:
-        # New button to trigger citation search
-        st.button(
-            label="Add Citations",
-            type="primary",
-            icon=":material/search:",
-            on_click=trigger_parameter_selection,
-            disabled=not has_content
-        )
