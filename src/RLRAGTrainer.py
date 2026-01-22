@@ -230,14 +230,14 @@ class RLRAGTrainer:
 
         return candidates
 
-    def train_single(self, query_id, target):
+    def train_single(self, query, target):
         # train on a single query
         # returns episode reward (recall) and gradient loss
 
         self.policy.train()
 
-        # candidate_ecli = self.get_candidates_with_features(query)
-        candidate_ecli = self.candidates_cache.get(query_id, [])
+        candidate_ecli = self.get_candidates_with_features(query)
+        # candidate_ecli = self.candidates_cache.get(query_id, [])
 
         # print("Candidate_ecli: ", candidate_ecli)
         if not candidate_ecli:
@@ -256,22 +256,22 @@ class RLRAGTrainer:
         predicted_top_10 = [candidate_ecli[i]['ecli'] for i in top_10_indices.cpu().numpy()]
 
         # For debug purposes
-        print("target: ", target)
-        print("predicted_top_10: ", predicted_top_10)
-        print("Scores: ", scores)
+        # print("target: ", target)
+        # print("predicted_top_10: ", predicted_top_10)
+        # print("Scores: ", scores)
         # Compute reward
         recall, _ = compute_reward(predicted_top_10, target)
-        print("Recall: ", recall)
+        # print("Recall: ", recall)
         # Policy Gradient Loss (REINFORCE)
         # We want to maximize reward, so minimize negative log probability weighted by reward
         log_probs = torch.log(scores + 1e-8)  # Add epsilon for numerical stability
-        print("Log_probs: ", log_probs)
+        # print("Log_probs: ", log_probs)
         # Only consider the top 10 documents we selected
         selected_log_probs = log_probs[top_10_indices]
-        print("Selected_log_probs: ", selected_log_probs)
+        # print("Selected_log_probs: ", selected_log_probs)
         # Policy gradient: maximize reward for selected actions
         loss = -torch.sum(selected_log_probs) * recall
-        print("Loss: ", loss, ", Loss item: ", loss.item())
+        # print("Loss: ", loss, ", Loss item: ", loss.item())
         # Backpropagation
         self.optimizer.zero_grad()
         loss.backward()
@@ -283,26 +283,27 @@ class RLRAGTrainer:
     def train(self, data, epochs, batch_size):
         # data is a list of dictionaries with query and targets
 
-        if not self.candidates_cache:
-            self.precompute_candidates(data)
+        #if not self.candidates_cache:
+        #    self.precompute_candidates(data)
 
         for epoch in range(epochs):
             epoch_rewards = []
             epoch_losses = []
 
             # Create index mapping
-            indices = list(range(len(data)))
-            np.random.shuffle(indices)
+            # indices = list(range(len(data)))
+            np.random.shuffle(data)
 
-            progress_bar = tqdm(indices, desc=f"Epoch {epoch + 1}/{epochs}")
-            for i, idx in enumerate(progress_bar):
-                targets = data[idx]['targets']
+            progress_bar = tqdm(data, desc=f"Epoch {epoch + 1}/{epochs}")
+            for i, sample in enumerate(progress_bar):
+                query = sample['query']
+                targets = sample['targets']
 
                 # print("QUERY: ", query)
                 # print("TARGET: ", targets)
 
                 # Train on this episode
-                recall, loss = self.train_single(idx, targets)
+                recall, loss = self.train_single(query, targets)
                 # print("Episode recall: ", recall)
 
                 epoch_rewards.append(recall)
@@ -447,7 +448,7 @@ if __name__ == "__main__":
     # Train the model
     trainer.train(
         data=train_data,
-        epochs=20,
+        epochs=10,
         batch_size=5
     )
 

@@ -11,6 +11,8 @@ from sentence_transformers.cross_encoder import (
 from sentence_transformers.cross_encoder.evaluation import CrossEncoderClassificationEvaluator
 from sentence_transformers.cross_encoder.losses import CachedMultipleNegativesRankingLoss
 
+# TODO: not sure if this model is inline with the rest of the trainingsetup
+
 # Set the log level to INFO to get more information
 logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO)
 
@@ -77,7 +79,7 @@ args = CrossEncoderTrainingArguments(
     learning_rate=2e-5,
     warmup_ratio=0.1,
     fp16=False,  # Set to False if you get an error that your GPU can't run on FP16
-    bf16=True,  # Set to True if you have a GPU that supports BF16
+    bf16=False,  # Set to True if you have a GPU that supports BF16
     # Optional tracking/debugging parameters:
     eval_strategy="steps",
     eval_steps=100,
