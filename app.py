@@ -1,5 +1,4 @@
 import streamlit as st
-# from run_rag import LegalRAGSystem
 from test_rag_infloat_multilingual import LegalRAGSystem
 import pandas as pd
 import re

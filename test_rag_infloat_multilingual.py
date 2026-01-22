@@ -14,7 +14,7 @@ from langchain_community.document_compressors.flashrank_rerank import FlashrankR
 from langchain_core.documents import Document
 
 # --- PATH FIX ---
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '')))
 
 # --- CONFIGURATION ---
 from rag_pipeline_infloat_multilingual import PERSIST_DIR, EMBEDDING_MODEL, COLLECTION_NAME, letters_path
@@ -246,7 +246,7 @@ class LegalRAGSystem:
 
         # Save detailed results to CSV
         # 1. Get root directory (one level up from /src)
-        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ''))
         # 2. Define the evaluation directory
         eval_dir = os.path.join(root_dir, 'data', 'evaluation')
         # 3. Create the folder if it doesn't exist

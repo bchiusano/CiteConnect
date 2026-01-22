@@ -10,7 +10,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 # Data paths
-DATA_DIR = "../data/"
+DATA_DIR = "data/"
 EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 COLLECTION_NAME = "legal_rag"
 
