@@ -46,6 +46,12 @@ if "search_params" not in st.session_state:
 if "ecli_list" not in st.session_state:
     st.session_state.ecli_list = []
 
+if "all_sorted_list" not in st.session_state:
+    st.session_state.all_sorted_list = []
+
+if "ecli_index_display" not in st.session_state:
+    st.session_state.ecli_index_display = 0
+
 if 'selected_ecli' not in st.session_state:
     st.session_state.selected_ecli = {}
 
@@ -88,9 +94,27 @@ def save_parameters():
     st.session_state.show_parameters = False
     st.session_state.parameters_confirmed = False
 
-    st.session_state.ecli_list = rag.get_top_10_for_letter(st.session_state.letter_text)
-    print(st.session_state.ecli_list)
+    # resetting this to 0 if the parameters where changed and saved
+    st.session_state.ecli_index_display = 0
+
+    with st.spinner("Finding the most relevant ECLI citations for your letter..."):
+        st.session_state.all_sorted_list = rag.get_top_10_for_letter(st.session_state.letter_text)
+
+    print("FULL List: ", st.session_state.all_sorted_list)
+    show_sorted_citations()
+
     st.rerun()
+
+
+def show_sorted_citations():
+
+    start = st.session_state.ecli_index_display
+    end = start + st.session_state.search_params["num_citations"]
+
+    st.session_state.ecli_list = st.session_state.all_sorted_list[start:end]
+
+    print(st.session_state.ecli_list)
+    print("HOW MANY ECLI's: ", len(st.session_state.all_sorted_list))
 
 
 def accept_ecli_selection():
@@ -319,19 +343,20 @@ with info:
         st.session_state.search_params["num_citations"] = st.number_input(
             "Number of total citations*",
             min_value=1,
-            max_value=100,
+            max_value=50,
             value=st.session_state.search_params["num_citations"],
             step=1
         )
 
         # Court Decision
-        st.session_state.search_params["court_decision"] = st.selectbox(
-            "Court Decision (Guilty/Innocent/Irrelevant)*",
-            options=["Irrelevant", "Guilty", "Innocent"],
-            index=["Irrelevant", "Guilty", "Innocent"].index(
-                st.session_state.search_params["court_decision"]
-            )
-        )
+        # TODO: check how to integrate this
+        #st.session_state.search_params["court_decision"] = st.selectbox(
+        #    "Court Decision (Guilty/Innocent/Irrelevant)*",
+        #    options=["Irrelevant", "Guilty", "Innocent"],
+        #    index=["Irrelevant", "Guilty", "Innocent"].index(
+        #        st.session_state.search_params["court_decision"]
+        #    )
+        #)
 
         # Minimum Accuracy
         st.session_state.search_params["min_accuracy"] = st.number_input(
@@ -340,14 +365,6 @@ with info:
             max_value=100,
             value=st.session_state.search_params["min_accuracy"],
             step=1
-        )
-
-        # Additional requests
-        st.session_state.search_params["additional_requests"] = st.text_area(
-            "Any additional requests?",
-            value=st.session_state.search_params["additional_requests"],
-            placeholder="Quote only the numbered paragraphs",
-            height=100
         )
 
         # Generate button
@@ -390,11 +407,23 @@ with info:
                 st.session_state.show_parameters = True
                 st.session_state.parameters_confirmed = True
                 st.rerun()
+
         with regenerate:
             if st.button("Regenerate", type='primary'):
                 # Re-run the search with same parameters
-                st.session_state.ecli_list = rag.get_top_10_for_letter(st.session_state.letter_text)
+                # Shows the other ecli's found in the sorted list
+                # Increments the index of the start of the list to display
+                st.session_state.ecli_index_display += st.session_state.search_params["num_citations"]
+
+                # bug check if regenerate was pressed too many times and all ecli's have been viewed
+                next_end_index = st.session_state.ecli_index_display + st.session_state.search_params["num_citations"]
+                if next_end_index >= len(st.session_state.all_sorted_list):
+                    # resetting this to 0
+                    st.session_state.ecli_index_display = 0
+
+                show_sorted_citations()
                 st.rerun()
+
         with accept:
             if st.button("Accept", type='primary', on_click=accept_ecli_selection):
                 # Clear citation mode
