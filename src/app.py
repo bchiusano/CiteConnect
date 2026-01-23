@@ -5,7 +5,18 @@ import pandas as pd
 import re
 
 st.set_page_config(layout="wide")
-st.title("CiteConnect")
+
+# Logo and centered title
+col1, col2, col3 = st.columns([1, 6, 1])
+
+with col1:
+    st.image("logo.png", width=100)
+
+with col2:
+    st.markdown("<h1 style='text-align: center; margin-top: 20px;'>CiteConnect</h1>", unsafe_allow_html=True)
+
+with col3:
+    st.write("")  # Empty column for balance
 
 
 # Initialize RAG class
@@ -493,3 +504,12 @@ with editor:
             on_click=trigger_parameter_selection,
             disabled=not has_content
         )
+
+# Blue footer at the bottom
+st.markdown("---")
+st.markdown("""
+<div style='background-color: #1E3A8A; padding: 20px; text-align: center; color: white; border-radius: 5px;'>
+    <p style='margin: 0; font-size: 14px;'>© 2026 CiteConnect. All rights reserved.</p>
+    <p style='margin: 5px 0 0 0; font-size: 12px;'>Legal citation search powered by advanced RAG technology | Terms of Service | Privacy Policy | Contact Us</p>
+</div>
+""", unsafe_allow_html=True)
