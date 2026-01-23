@@ -3,11 +3,13 @@ import sys
 import pickle
 import re
 import time
-import sys
+import random
+import ast
 import spacy
 import platform
 import pandas as pd
 import numpy as np
+from typing import Dict, List, Set, Tuple
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
@@ -20,12 +22,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '')))
 from rag_pipeline_infloat_multilingual import PERSIST_DIR, EMBEDDING_MODEL, COLLECTION_NAME, letters_path
 from resources.domain_config import DOMAIN_MAP, ACTIVE_DOMAIN
 from rag_index_infloat_multilingual import BM25_INDEX_PATH, CORPUS_PATH
+from rag_enhancements import enhance_retrieval_results, load_or_build_citation_db
 
 RERANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
 
 # --- PARAMETERS ---
 NUM_TEST_ROWS = 30
 RANDOM_SEED = 40
+TEST_RATIO = 0.2
 SEARCH_K = 200
 RERANK_TOP_N = 50
 CANDIDATE_LIMIT = 50
@@ -62,6 +66,78 @@ def clean_ecli(text):
     return cleaned
 
 
+def load_ground_truth_from_excel(excel_path: str, id_column: str = None) -> Dict[str, List[str]]:
+    # Load ground truth from Excel, returns {advice_id: [ecli_list]}
+    df = pd.read_excel(excel_path)
+    ground_truth = {}
+    
+    if id_column is None:
+        for col in ["zaaknummer", "Octopus zaaknummer", "doc_id", "id"]:
+            if col in df.columns:
+                id_column = col
+                break
+        if id_column is None:
+            id_column = df.columns[0]
+    
+    for _, row in df.iterrows():
+        advice_id = str(row[id_column]) if id_column in df.columns else str(row.index[0])
+        ecli_value = row.get("ECLI")
+        
+        if pd.isna(ecli_value):
+            continue
+        
+        ecli_list = []
+        if isinstance(ecli_value, str):
+            try:
+                parsed = ast.literal_eval(ecli_value)
+                if isinstance(parsed, list):
+                    ecli_list = [str(e) for e in parsed]
+                else:
+                    ecli_list = [str(parsed)]
+            except Exception:
+                ecli_list = [ecli_value]
+        elif isinstance(ecli_value, list):
+            ecli_list = [str(e) for e in ecli_value]
+        else:
+            ecli_list = [str(ecli_value)]
+        
+        ecli_list = [clean_ecli(e) for e in ecli_list if clean_ecli(e)]
+        if ecli_list:
+            ground_truth[advice_id] = ecli_list
+    
+    return ground_truth
+
+
+def split_train_test(
+    ground_truth: Dict[str, List[str]],
+    test_ratio: float = 0.2,
+    random_seed: int = 42
+) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    # Split into train/test sets
+    if not ground_truth:
+        return {}, {}
+    
+    advice_ids = list(ground_truth.keys())
+    random.seed(random_seed)
+    shuffled_ids = advice_ids.copy()
+    random.shuffle(shuffled_ids)
+    
+    split_idx = int(len(shuffled_ids) * (1 - test_ratio))
+    train_ids = set(shuffled_ids[:split_idx])
+    test_ids = set(shuffled_ids[split_idx:])
+    
+    train_gt = {aid: ecli_list for aid, ecli_list in ground_truth.items() if aid in train_ids}
+    test_gt = {aid: ecli_list for aid, ecli_list in ground_truth.items() if aid in test_ids}
+    
+    return train_gt, test_gt
+
+
+def get_train_ids(ground_truth: Dict[str, List[str]], test_ratio: float = 0.2, random_seed: int = 42) -> Set[str]:
+    # Get train IDs to prevent data leakage
+    train_gt, _ = split_train_test(ground_truth, test_ratio, random_seed)
+    return set(train_gt.keys())
+
+
 class LegalRAGSystem:
     def __init__(self):
         print("Initializing Engines...")
@@ -88,8 +164,24 @@ class LegalRAGSystem:
         self.reranker = FlashrankRerank(
             model=RERANK_MODEL, top_n=RERANK_TOP_N
         )
+        
+        # Citation DB initialized lazily after train/test split
+        self.citation_db = None
 
-    def get_top_10_for_letter(self, letter_text, domain="bicycle"):
+    def init_citation_db(self, train_ids: Set[str], force_rebuild: bool = False):
+        """Initialize citation prototype DB (call after train/test split)."""
+        self.citation_db = load_or_build_citation_db(
+            embedder=self.embeddings,
+            letters_path=letters_path,
+            train_ids=train_ids,
+            force_rebuild=force_rebuild
+        )
+
+    def get_top_10_for_letter(self, letter_text, domain="bicycle", train_ids=None, use_enhancements=True):
+        # Safeguard: ensure citation DB is initialized when using enhancements
+        if use_enhancements and self.citation_db is None:
+            raise RuntimeError("Citation DB not initialized. Call init_citation_db(train_ids) first.")
+        
         keywords = DOMAIN_MAP.get(domain, {}).get("keywords", [])
         anchor = " ".join(keywords)
 
@@ -98,7 +190,12 @@ class LegalRAGSystem:
         sentences = [s.text.strip() for s in doc.sents if s.text.strip()]
         num_issues = 5
         chunk_size = max(1, len(sentences) // num_issues)
-        issues = [" ".join(sentences[i * chunk_size: (i + 1) * chunk_size]) for i in range(num_issues)]
+        # Last chunk absorbs remainder to avoid dropping sentences
+        issues = []
+        for i in range(num_issues):
+            start = i * chunk_size
+            end = (i + 1) * chunk_size if i < num_issues - 1 else len(sentences)
+            issues.append(" ".join(sentences[start:end]))
 
         ecli_best_chunks = {}
 
@@ -144,9 +241,31 @@ class LegalRAGSystem:
                                 ecli_best_chunks[ecli] = final_score
             except:
                 continue
-        print()
-        #return [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)[:10]]
-        return [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)]
+        
+        base_results = [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)]
+        
+        # Apply enhancements if enabled (uses separate citation_db)
+        if use_enhancements:
+            try:
+                enhanced_results = enhance_retrieval_results(
+                    chunk_results=base_results,
+                    letter_text=letter_text,
+                    citation_db=self.citation_db,
+                    letters_path=letters_path,
+                    train_ids=train_ids,
+                    proto_k=50,
+                    top_ecli=10,
+                    use_citation_context=True,
+                    use_issue_boost=True,
+                    use_popularity=True,
+                    use_fallback=True
+                )
+                return [(r.get("ecli", ""), r.get("score", 0.0)) for r in enhanced_results]
+            except Exception as e:
+                print(f"Warning: Enhancements failed, using base results: {e}")
+                return base_results[:10]
+        else:
+            return base_results[:10]
 
     def _rrf_fusion(self, v_hits, b_hits, k=60):
         scores = {}
@@ -166,9 +285,28 @@ class LegalRAGSystem:
         df = pd.read_excel(letters_path)
         data = df.dropna(subset=['ECLI', 'geanonimiseerd_doc_inhoud'])
 
+        # Split train/test to prevent data leakage
+        ground_truth = load_ground_truth_from_excel(letters_path)
+        train_gt, test_gt = split_train_test(ground_truth, test_ratio=TEST_RATIO, random_seed=RANDOM_SEED)
+        train_ids = set(train_gt.keys())
+        test_ids = set(test_gt.keys())
+        print(f"Data split: {len(train_ids)} training, {len(test_ids)} test (total {len(ground_truth)})")
+        
+        # Build citation prototype DB from training data
+        self.init_citation_db(train_ids, force_rebuild=False)
+
+        id_col = None
+        for col in ["zaaknummer", "Octopus zaaknummer", "doc_id", "id"]:
+            if col in data.columns:
+                id_col = col
+                break
+        if id_col:
+            data = data[data[id_col].astype(str).isin(test_ids)]
+        else:
+            print("Warning: Could not find ID column, using all data (may cause data leakage)")
+        
         if mode == "sample":
-            # Using the new seed to validate consistency
-            data = data.sample(n=NUM_TEST_ROWS, random_state=RANDOM_SEED)
+            data = data.sample(n=min(NUM_TEST_ROWS, len(data)), random_state=RANDOM_SEED)
 
         results = []
         metrics = {
@@ -185,8 +323,14 @@ class LegalRAGSystem:
             targets = [clean_ecli(e) for e in str(row['ECLI']).replace(';', ',').split(',') if clean_ecli(e)]
 
             # 2. Retrieval using the Issues-Based strategy
-            found_raw = self.get_top_10_for_letter(str(row['geanonimiseerd_doc_inhoud']), ACTIVE_DOMAIN)
-            top_10 = [clean_ecli(f) for f in found_raw]
+            # MODIFIED: Pass train_ids to prevent data leakage
+            found_raw = self.get_top_10_for_letter(
+                str(row['geanonimiseerd_doc_inhoud']), 
+                ACTIVE_DOMAIN,
+                train_ids=train_ids,
+                use_enhancements=True
+            )
+            top_10 = [clean_ecli(f[0] if isinstance(f, tuple) else f) for f in found_raw]
 
             # 3. Calculate Row Metrics
             hits = [t for t in targets if t in top_10]
