@@ -309,11 +309,15 @@ class LegalRAGSystem:
             data = data.sample(n=min(NUM_TEST_ROWS, len(data)), random_state=RANDOM_SEED)
 
         results = []
+        # Metrics for both Top-5 and Top-10
         metrics = {
-            "reciprocal_ranks": [],
+            "reciprocal_ranks_5": [],
+            "reciprocal_ranks_10": [],
+            "hits_at_5": 0,
             "hits_at_10": 0,
             "total_targets": 0,
-            "precisions": []
+            "precisions_5": [],
+            "precisions_10": []
         }
 
         start_time = time.time()
@@ -331,62 +335,90 @@ class LegalRAGSystem:
                 use_enhancements=True
             )
             top_10 = [clean_ecli(f[0] if isinstance(f, tuple) else f) for f in found_raw]
+            top_5 = top_10[:5]
 
-            # 3. Calculate Row Metrics
-            hits = [t for t in targets if t in top_10]
-            row_recall = len(hits) / len(targets) if len(targets) > 0 else 0
-            row_precision = len(hits) / len(top_10) if len(top_10) > 0 else 0
+            # 3. Calculate Row Metrics for Top-10
+            hits_10 = [t for t in targets if t in top_10]
+            row_recall_10 = len(hits_10) / len(targets) if len(targets) > 0 else 0
+            row_precision_10 = len(hits_10) / len(top_10) if len(top_10) > 0 else 0
+
+            # Calculate Row Metrics for Top-5
+            hits_5 = [t for t in targets if t in top_5]
+            row_recall_5 = len(hits_5) / len(targets) if len(targets) > 0 else 0
+            row_precision_5 = len(hits_5) / len(top_5) if len(top_5) > 0 else 0
 
             # Accumulate for global metrics
-            metrics["hits_at_10"] += len(hits)
+            metrics["hits_at_10"] += len(hits_10)
+            metrics["hits_at_5"] += len(hits_5)
             metrics["total_targets"] += len(targets)
-            metrics["precisions"].append(row_precision)
+            metrics["precisions_10"].append(row_precision_10)
+            metrics["precisions_5"].append(row_precision_5)
 
-            # 4. Calculate Reciprocal Rank for MRR
-            rank_score = 0
+            # 4. Calculate Reciprocal Rank for MRR (Top-10)
+            rank_score_10 = 0
             for i, ecli in enumerate(top_10, 1):
                 if ecli in targets:
-                    rank_score = 1 / i
+                    rank_score_10 = 1 / i
                     break
-            metrics["reciprocal_ranks"].append(rank_score)
+            metrics["reciprocal_ranks_10"].append(rank_score_10)
+
+            # Calculate Reciprocal Rank for MRR (Top-5)
+            rank_score_5 = 0
+            for i, ecli in enumerate(top_5, 1):
+                if ecli in targets:
+                    rank_score_5 = 1 / i
+                    break
+            metrics["reciprocal_ranks_5"].append(rank_score_5)
 
             # --- DETAILED OUTPUT PER ROW ---
             print(f"\nRow ID: {idx}")
             print(f"Target ECLIs:  {targets}")
+            print(f"Top 5 Found:   {top_5}")
             print(f"Top 10 Found:  {top_10}")
-            print(f"Result:        {len(hits)}/{len(targets)} hits")
-            print(f"Recall:        {row_recall:.4f}")
-            print(f"Precision:     {row_precision:.4f}")
-            print(f"MRR Rank Score: {rank_score:.4f}")
+            print(f"Result @5:     {len(hits_5)}/{len(targets)} hits | Recall: {row_recall_5:.4f}")
+            print(f"Result @10:    {len(hits_10)}/{len(targets)} hits | Recall: {row_recall_10:.4f}")
             print("-" * 30)
 
             # Store results for CSV export
             results.append({
                 "row_id": idx,
                 "targets": "; ".join(targets),
+                "top_5": "; ".join(top_5),
                 "top_10": "; ".join(top_10),
-                "recall_at_10": row_recall,
-                "precision_at_10": row_precision,
-                "mrr": rank_score
+                "recall_at_5": row_recall_5,
+                "recall_at_10": row_recall_10,
+                "precision_at_5": row_precision_5,
+                "precision_at_10": row_precision_10,
+                "mrr_5": rank_score_5,
+                "mrr_10": rank_score_10
             })
 
             # Progress tracker
             if len(results) % 5 == 0:
-                current_recall = metrics['hits_at_10'] / metrics['total_targets'] if metrics['total_targets'] > 0 else 0
-                print(f"\n>>> PROGRESS: {len(results)}/{len(data)} | Current Recall@10: {current_recall:.2%}")
+                current_recall_5 = metrics['hits_at_5'] / metrics['total_targets'] if metrics['total_targets'] > 0 else 0
+                current_recall_10 = metrics['hits_at_10'] / metrics['total_targets'] if metrics['total_targets'] > 0 else 0
+                print(f"\n>>> PROGRESS: {len(results)}/{len(data)} | Recall@5: {current_recall_5:.2%} | Recall@10: {current_recall_10:.2%}")
 
         # --- FINAL SUMMARY STATISTICS ---
-        final_recall = metrics["hits_at_10"] / metrics["total_targets"] if metrics["total_targets"] > 0 else 0
-        final_precision = np.mean(metrics["precisions"])
-        final_mrr = np.mean(metrics["reciprocal_ranks"])
+        final_recall_5 = metrics["hits_at_5"] / metrics["total_targets"] if metrics["total_targets"] > 0 else 0
+        final_recall_10 = metrics["hits_at_10"] / metrics["total_targets"] if metrics["total_targets"] > 0 else 0
+        final_precision_5 = np.mean(metrics["precisions_5"])
+        final_precision_10 = np.mean(metrics["precisions_10"])
+        final_mrr_5 = np.mean(metrics["reciprocal_ranks_5"])
+        final_mrr_10 = np.mean(metrics["reciprocal_ranks_10"])
 
-        print("\n" + "=" * 50)
+        print("\n" + "=" * 60)
         print(f"FINAL EVALUATION METRICS (SEED: {RANDOM_SEED})")
-        print(f"Recall@10 (Accuracy): {final_recall:.4f} ({final_recall * 100:.2f}%)")
-        print(f"Precision@10:         {final_precision:.4f} ({final_precision * 100:.2f}%)")
-        print(f"MRR:                  {final_mrr:.4f}")
+        print("=" * 60)
+        print(f"{'Metric':<25} {'Top-5':<15} {'Top-10':<15}")
+        print("-" * 60)
+        print(f"{'Recall (Accuracy)':<25} {final_recall_5*100:.2f}%{'':<9} {final_recall_10*100:.2f}%")
+        print(f"{'Precision':<25} {final_precision_5*100:.2f}%{'':<9} {final_precision_10*100:.2f}%")
+        print(f"{'MRR':<25} {final_mrr_5:.4f}{'':<10} {final_mrr_10:.4f}")
+        print("=" * 60)
+        print(f"Total Test Samples: {len(data)}")
         print(f"Total Evaluation Time: {(time.time() - start_time) / 60:.2f} mins")
-        print("=" * 50)
+        print("=" * 60)
 
         # Save detailed results to CSV
         # 1. Get root directory (one level up from /src)
@@ -411,5 +443,5 @@ class LegalRAGSystem:
 # --- EXECUTION ---
 if __name__ == "__main__":
     rag = LegalRAGSystem()
-    rag.run_evaluation(mode="sample")
-    # rag.run_evaluation(mode="full")
+    # rag.run_evaluation(mode="sample")
+    rag.run_evaluation(mode="full")

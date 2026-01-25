@@ -107,10 +107,16 @@ def build_citation_prototypes(
         for ecli, ctx_text in contexts:
             doc_unique_id = f"{doc_id}_{ecli}_{len(ids)}"
             documents.append(ctx_text)
+            
+            # predict the issue typle of citation context
+            issue_scores = predict_issues_simple(ctx_text)
+            issue_id = issue_scores[0][0] if issue_scores else None
+            
             metadatas.append({
                 "ecli_nummer": ecli,
                 "source_doc_id": doc_id,
-                "doc_type": "citation_context"
+                "doc_type": "citation_context",
+                "issue_id": issue_id  
             })
             ids.append(doc_unique_id)
     
@@ -301,9 +307,9 @@ def get_popular_ecli_from_data(
 def apply_citation_context_boost(
     chunk_hits: List[Dict],
     proto_hits: List[Dict],
-    boost_weight_high: float = 0.65,
-    boost_weight_normal: float = 0.5,
-    similarity_threshold: float = 0.75
+    boost_weight_high: float = 0.75,  # 增加 citation boost
+    boost_weight_normal: float = 0.55,
+    similarity_threshold: float = 0.70  # 稍微降低阈值
 ) -> Tuple[List[Dict], Dict[str, float], Dict[str, str], Dict[str, str]]:
     # Apply citation context boost, returns (hits, proto_best_sim, proto_issue, proto_best_text)
     # Build prototype maps
@@ -318,7 +324,8 @@ def apply_citation_context_boost(
         sim = float(p.get("sim", 0.0))
         if ecli not in proto_best_sim or sim > proto_best_sim[ecli]:
             proto_best_sim[ecli] = sim
-            proto_issue[ecli] = p.get("issue_id")
+            raw_issue = p.get("issue_id")
+            proto_issue[ecli] = str(raw_issue) if raw_issue is not None and not isinstance(raw_issue, str) else raw_issue
             proto_best_text[ecli] = p.get("text", "")
     
     # Apply boosts to existing candidates
@@ -348,8 +355,10 @@ def apply_issue_aware_boost(
         if not ecli:
             continue
         iid = proto_issue.get(ecli)
-        if iid and iid in issue_score_map:
-            h["score"] = h.get("score", 0.0) + boost_weight * issue_score_map[iid]
+        if iid is not None:
+            iid = str(iid) if not isinstance(iid, str) else iid
+            if iid in issue_score_map:
+                h["score"] = h.get("score", 0.0) + boost_weight * issue_score_map[iid]
     
     return chunk_hits
 
