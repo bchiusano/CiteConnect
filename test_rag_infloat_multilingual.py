@@ -70,7 +70,7 @@ def load_ground_truth_from_excel(excel_path: str, id_column: str = None) -> Dict
     # Load ground truth from Excel, returns {advice_id: [ecli_list]}
     df = pd.read_excel(excel_path)
     ground_truth = {}
-    
+
     if id_column is None:
         for col in ["zaaknummer", "Octopus zaaknummer", "doc_id", "id"]:
             if col in df.columns:
@@ -78,14 +78,14 @@ def load_ground_truth_from_excel(excel_path: str, id_column: str = None) -> Dict
                 break
         if id_column is None:
             id_column = df.columns[0]
-    
+
     for _, row in df.iterrows():
         advice_id = str(row[id_column]) if id_column in df.columns else str(row.index[0])
         ecli_value = row.get("ECLI")
-        
+
         if pd.isna(ecli_value):
             continue
-        
+
         ecli_list = []
         if isinstance(ecli_value, str):
             try:
@@ -100,35 +100,35 @@ def load_ground_truth_from_excel(excel_path: str, id_column: str = None) -> Dict
             ecli_list = [str(e) for e in ecli_value]
         else:
             ecli_list = [str(ecli_value)]
-        
+
         ecli_list = [clean_ecli(e) for e in ecli_list if clean_ecli(e)]
         if ecli_list:
             ground_truth[advice_id] = ecli_list
-    
+
     return ground_truth
 
 
 def split_train_test(
-    ground_truth: Dict[str, List[str]],
-    test_ratio: float = 0.2,
-    random_seed: int = 42
+        ground_truth: Dict[str, List[str]],
+        test_ratio: float = 0.2,
+        random_seed: int = 42
 ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     # Split into train/test sets
     if not ground_truth:
         return {}, {}
-    
+
     advice_ids = list(ground_truth.keys())
     random.seed(random_seed)
     shuffled_ids = advice_ids.copy()
     random.shuffle(shuffled_ids)
-    
+
     split_idx = int(len(shuffled_ids) * (1 - test_ratio))
     train_ids = set(shuffled_ids[:split_idx])
     test_ids = set(shuffled_ids[split_idx:])
-    
+
     train_gt = {aid: ecli_list for aid, ecli_list in ground_truth.items() if aid in train_ids}
     test_gt = {aid: ecli_list for aid, ecli_list in ground_truth.items() if aid in test_ids}
-    
+
     return train_gt, test_gt
 
 
@@ -164,7 +164,7 @@ class LegalRAGSystem:
         self.reranker = FlashrankRerank(
             model=RERANK_MODEL, top_n=RERANK_TOP_N
         )
-        
+
         # Citation DB initialized lazily after train/test split
         self.citation_db = None
 
@@ -176,12 +176,21 @@ class LegalRAGSystem:
             train_ids=train_ids,
             force_rebuild=force_rebuild
         )
+        print("Citation_db working with ids: ", train_ids)
+
+    def load_citation_db_for_ui(self):
+        self.citation_db = load_or_build_citation_db(
+            embedder=self.embeddings,
+            letters_path=None,
+            train_ids=None,
+            force_rebuild=False
+        )
 
     def get_top_10_for_letter(self, letter_text, domain="bicycle", train_ids=None, use_enhancements=True):
         # Safeguard: ensure citation DB is initialized when using enhancements
         if use_enhancements and self.citation_db is None:
             raise RuntimeError("Citation DB not initialized. Call init_citation_db(train_ids) first.")
-        
+
         keywords = DOMAIN_MAP.get(domain, {}).get("keywords", [])
         anchor = " ".join(keywords)
 
@@ -241,9 +250,10 @@ class LegalRAGSystem:
                                 ecli_best_chunks[ecli] = final_score
             except:
                 continue
-        
-        base_results = [(eid, score) for eid, score in sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)]
-        
+
+        base_results = [(eid, score) for eid, score in
+                        sorted(ecli_best_chunks.items(), key=lambda x: x[1], reverse=True)]
+
         # Apply enhancements if enabled (uses separate citation_db)
         if use_enhancements:
             try:
@@ -278,6 +288,12 @@ class LegalRAGSystem:
             scores[eid] = scores.get(eid, 0) + 0.3 * (1 / (r + k))
         return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
+    def prepare_train_ids_for_citation_db(self):
+        ground_truth = load_ground_truth_from_excel(letters_path)
+        train_gt, test_gt = split_train_test(ground_truth, test_ratio=TEST_RATIO, random_seed=RANDOM_SEED)
+        train_ids = set(train_gt.keys())
+        return train_ids
+
     def run_evaluation(self, mode="full"):
         print(f"--- STARTING EVALUATION MODE: {mode.upper()} ---")
 
@@ -291,7 +307,7 @@ class LegalRAGSystem:
         train_ids = set(train_gt.keys())
         test_ids = set(test_gt.keys())
         print(f"Data split: {len(train_ids)} training, {len(test_ids)} test (total {len(ground_truth)})")
-        
+
         # Build citation prototype DB from training data
         self.init_citation_db(train_ids, force_rebuild=False)
 
@@ -304,7 +320,7 @@ class LegalRAGSystem:
             data = data[data[id_col].astype(str).isin(test_ids)]
         else:
             print("Warning: Could not find ID column, using all data (may cause data leakage)")
-        
+
         if mode == "sample":
             data = data.sample(n=min(NUM_TEST_ROWS, len(data)), random_state=RANDOM_SEED)
 
@@ -329,7 +345,7 @@ class LegalRAGSystem:
             # 2. Retrieval using the Issues-Based strategy
             # MODIFIED: Pass train_ids to prevent data leakage
             found_raw = self.get_top_10_for_letter(
-                str(row['geanonimiseerd_doc_inhoud']), 
+                str(row['geanonimiseerd_doc_inhoud']),
                 ACTIVE_DOMAIN,
                 train_ids=train_ids,
                 use_enhancements=True
@@ -395,9 +411,12 @@ class LegalRAGSystem:
 
             # Progress tracker
             if len(results) % 5 == 0:
-                current_recall_5 = metrics['hits_at_5'] / metrics['total_targets'] if metrics['total_targets'] > 0 else 0
-                current_recall_10 = metrics['hits_at_10'] / metrics['total_targets'] if metrics['total_targets'] > 0 else 0
-                print(f"\n>>> PROGRESS: {len(results)}/{len(data)} | Recall@5: {current_recall_5:.2%} | Recall@10: {current_recall_10:.2%}")
+                current_recall_5 = metrics['hits_at_5'] / metrics['total_targets'] if metrics[
+                                                                                          'total_targets'] > 0 else 0
+                current_recall_10 = metrics['hits_at_10'] / metrics['total_targets'] if metrics[
+                                                                                            'total_targets'] > 0 else 0
+                print(
+                    f"\n>>> PROGRESS: {len(results)}/{len(data)} | Recall@5: {current_recall_5:.2%} | Recall@10: {current_recall_10:.2%}")
 
         # --- FINAL SUMMARY STATISTICS ---
         final_recall_5 = metrics["hits_at_5"] / metrics["total_targets"] if metrics["total_targets"] > 0 else 0
@@ -412,8 +431,8 @@ class LegalRAGSystem:
         print("=" * 60)
         print(f"{'Metric':<25} {'Top-5':<15} {'Top-10':<15}")
         print("-" * 60)
-        print(f"{'Recall (Accuracy)':<25} {final_recall_5*100:.2f}%{'':<9} {final_recall_10*100:.2f}%")
-        print(f"{'Precision':<25} {final_precision_5*100:.2f}%{'':<9} {final_precision_10*100:.2f}%")
+        print(f"{'Recall (Accuracy)':<25} {final_recall_5 * 100:.2f}%{'':<9} {final_recall_10 * 100:.2f}%")
+        print(f"{'Precision':<25} {final_precision_5 * 100:.2f}%{'':<9} {final_precision_10 * 100:.2f}%")
         print(f"{'MRR':<25} {final_mrr_5:.4f}{'':<10} {final_mrr_10:.4f}")
         print("=" * 60)
         print(f"Total Test Samples: {len(data)}")

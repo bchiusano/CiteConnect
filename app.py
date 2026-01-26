@@ -1,10 +1,11 @@
 import gradio as gr
 from test_rag_infloat_multilingual import LegalRAGSystem
 import pandas as pd
+from pathlib import Path
 import re
 
 # Initialize RAG system and data
-rag = LegalRAGSystem()
+# rag = LegalRAGSystem()
 ecli_df = pd.read_excel("../data/DATA ecli_nummers juni 2025 v1 (version 1).xlsx").set_index('ecli_nummer')
 
 
@@ -35,7 +36,7 @@ def generate_citations(letter_text, num_citations, min_accuracy, state):
     print("button clicked")
     print("file content: ", letter_text)
     # Get all sorted results
-    state.all_sorted_list = rag.get_top_10_for_letter(letter_text)
+    #state.all_sorted_list = rag.get_top_10_for_letter(letter_text)
     state.ecli_index_display = 0
     state.search_params["num_citations"] = num_citations
     state.search_params["min_accuracy"] = min_accuracy
@@ -103,10 +104,11 @@ def add_selected_ecli_to_text(letter_text, ecli_to_add):
 
 def load_file(file):
     """Load uploaded file"""
-    if file is not None:
-        content = file.read().decode('utf-8')
-        return content
-    return ""
+    if file is None:
+        return ""
+
+    with open(file, 'r', encoding='utf-8') as f:
+        return str(f.read())
 
 
 # Create Gradio interface
@@ -124,7 +126,7 @@ with gr.Blocks() as app:
             file_upload = gr.UploadButton(
                 label="Upload Letter (.txt)",
                 file_types=[".txt"],
-                type="binary",
+                type="filepath",
                 file_count="single"
             )
 
@@ -137,10 +139,9 @@ with gr.Blocks() as app:
 
         # Editor
         letter_text = gr.Textbox(
-            label="Letter Text",
+            label="Legal Advice Letter",
             placeholder="Upload a legal advice letter or type directly to begin...",
-            lines=15,
-            max_lines=20
+            max_lines=2000
         )
 
         gr.Markdown("## Search ECLI Citations")
@@ -189,7 +190,7 @@ with gr.Blocks() as app:
     file_upload.upload(
         fn=load_file,
         inputs=[file_upload],
-        outputs=[letter_text]
+        outputs=letter_text
     )
 
     generate_btn.click(

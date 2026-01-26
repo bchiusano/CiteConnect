@@ -14,13 +14,25 @@ def get_rag_instance():
 
 
 @st.cache_resource
+def get_train_ids():
+    return rag.prepare_train_ids_for_citation_db()
+
+
+@st.cache_resource
 def get_ecli_data():
     df = pd.read_excel("../data/DATA ecli_nummers juni 2025 v1 (version 1).xlsx")
     return df.set_index('ecli_nummer')
 
 
+@st.cache_resource
+def load_citations():
+    rag.init_citation_db(train_ids, False)
+
+
 # Get the cached instance
 rag = get_rag_instance()
+train_ids = get_train_ids()
+load_citations()
 ecli_df = get_ecli_data()
 
 # Initialize session state variables
@@ -91,7 +103,7 @@ def save_parameters():
     st.session_state.ecli_index_display = 0
 
     with st.spinner("Finding the most relevant ECLI citations for your letter..."):
-        st.session_state.all_sorted_list = rag.get_top_10_for_letter(st.session_state.letter_text)
+        st.session_state.all_sorted_list = rag.get_top_10_for_letter(st.session_state.letter_text, domain="bicycle", train_ids=train_ids)
 
     print("FULL List: ", st.session_state.all_sorted_list)
     show_sorted_citations()
@@ -133,7 +145,7 @@ def search_database(query):
     Perform RAG search and return top 5 results in conversational format
     """
     # Use the RAG system to get top results, but limit to 5
-    all_results = rag.get_top_10_for_letter(query, domain="bicycle")
+    all_results = rag.get_top_10_for_letter(query, domain="bicycle", train_ids=train_ids)
     top_eclis = all_results[:5]  # Limit to 5
     
     # Store results for this query
