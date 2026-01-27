@@ -14,6 +14,58 @@ print("loading ecli citations data")
 ecli_df = pd.read_excel("../data/DATA ecli_nummers juni 2025 v1 (version 1).xlsx").set_index('ecli_nummer')
 
 
+# css to match municipality requirements
+css = """
+.custom-button {
+    background-color: #004699 !important;
+    font-family: 'Arial', sans-serif !important;
+    color: white !important;
+    border: none !important;
+}
+
+.small-icon img {
+    width: 100px !important;
+    height: 100px !important;
+    object-fit: contain !important;
+}
+
+.left-column {
+    border-right: 2px solid #004699 !important;
+    padding-right: 20px !important;
+}
+
+.right-column {
+    padding-left: 20px !important;
+}
+
+.spinner-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #004699;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+"""
+
+theme = gr.themes.Default().set(
+    loader_color="#FF0000",
+    slider_color="#FF0000",
+    button_primary_background_fill="#004699"
+)
+
 # Global state (will be managed through Gradio's state components)
 class AppState:
     def __init__(self):
@@ -39,8 +91,10 @@ def generate_citations(letter_text, num_citations, min_accuracy, state):
         return "Please enter or upload letter text first.", "", state
 
     # Get all sorted results
-    # state.all_sorted_list = [('NL:CRVB:2021:612', np.float32(0.8029959)), ('NL:RVS:2013:53', np.float32(0.8029759))]
+    # for debugging purposes
+    #state.all_sorted_list = [('NL:CRVB:2021:612', np.float32(0.8029959)), ('NL:RVS:2013:53', np.float32(0.8029759))]
     state.all_sorted_list = rag.get_top_10_for_letter(letter_text, domain="bicycle", train_ids=train_ids)
+
     state.ecli_index_display = 0
     state.search_params["num_citations"] = num_citations
     state.search_params["min_accuracy"] = min_accuracy
@@ -48,7 +102,7 @@ def generate_citations(letter_text, num_citations, min_accuracy, state):
     # Display results
     results_html = format_citation_results(state)
 
-    return results_html, gr.update(visible=True), state
+    return results_html, gr.update(visible=False), gr.update(visible=True), state
 
 
 def format_citation_results(state):
@@ -119,6 +173,12 @@ def load_file(file):
 
 # Create Gradio interface
 with gr.Blocks() as app:
+    #with gr.Row():
+    #    gr.Image("Default_web_rgb.svg",
+    #             elem_classes="small-icon",
+    #             show_label=False,
+    #             interactive=False,
+    #             container=False)
     gr.Markdown("# CiteConnect")
     gr.Markdown("### Legal Citation Search System")
 
@@ -132,33 +192,37 @@ with gr.Blocks() as app:
                 label="Upload Letter (.txt)",
                 file_types=[".txt"],
                 type="filepath",
-                file_count="single"
+                file_count="single",
+                elem_classes="custom-button"
             )
 
             download_btn = gr.DownloadButton(
                 label="Download text",
+                elem_classes="custom-button"
             )
-            preview_btn = gr.Button(
-                "Preview PDF",
-            )
+            #preview_btn = gr.Button(
+            #    "Preview PDF",
+            #    elem_classes="custom-button"
+            #)
 
         # Editor
         letter_text = gr.Textbox(
             label="Legal Advice Letter",
             placeholder="Upload a legal advice letter or type directly to begin...",
+            lines=8,
             max_lines=2000
         )
 
         with gr.Row():
-            with gr.Column():
+            with gr.Column(elem_classes="left-column"):
                 gr.Markdown("## Search ECLI Citations")
                 with gr.Group():
                     gr.Markdown("*Be aware of possible bias that may come from added parameters.*")
 
                     num_citations = gr.Slider(
                         minimum=1,
-                        maximum=50,
-                        value=9,
+                        maximum=20,
+                        value=10,
                         step=1,
                         label="Number of total citations"
                     )
@@ -173,23 +237,34 @@ with gr.Blocks() as app:
 
                     generate_btn = gr.Button(
                         "Generate Citations",
-                        variant="primary",
+                        elem_classes="custom-button",
                         size="lg"
                     )
 
                 with gr.Row(visible=False) as action_buttons:
-                    regenerate_btn = gr.Button("Regenerate", variant="primary")
+                    regenerate_btn = gr.Button("Regenerate", elem_classes="custom-button",)
 
                 with gr.Group():
                     ecli_input = gr.Textbox(
                         label="ECLI to add to letter",
                         placeholder="Paste ECLI here to add to letter..."
                     )
-                    add_ecli_btn = gr.Button("Add to Letter", variant="secondary")
+                    add_ecli_btn = gr.Button("Add to Letter", elem_classes="custom-button",)
 
-            with gr.Column():
-                gr.Markdown("## Display retrieved ECLI Citations")
+            with gr.Column(elem_classes="right-column"):
+                gr.Markdown("## Retrieved ECLI Citations")
                 # Displays the list of ecli citations found
+
+                # No citations are being retrieved yet
+                temp_markdown = gr.Markdown("#### Click on Generate Citations", visible=True)
+
+                # Thinking spinner
+                loading_spinner = gr.HTML(
+                    value="<div class='spinner-container'><div class='spinner'></div></div>",
+                    visible=True
+                )
+
+                # Results
                 results_display = gr.HTML(
                     label="Citation Results",
                     visible=True
@@ -203,9 +278,13 @@ with gr.Blocks() as app:
     )
 
     generate_btn.click(
+        fn=lambda: (gr.update(visible=True), gr.update(visible=False)),
+        inputs=[],
+        outputs=[loading_spinner, temp_markdown]
+    ).then(
         fn=generate_citations,
         inputs=[letter_text, num_citations, min_accuracy, state],
-        outputs=[results_display, action_buttons, state]
+        outputs=[results_display, loading_spinner, action_buttons, state]
     )
 
     regenerate_btn.click(
@@ -220,15 +299,6 @@ with gr.Blocks() as app:
         outputs=[letter_text]
     )
 
-    #preview_btn.click(
-    #    fn=lambda: "Preview functionality to be implemented",
-    #    inputs=[],
-    #    outputs=[preview_output]
-    #).then(
-    #    fn=lambda: gr.update(visible=True),
-    #    outputs=[preview_output]
-    #)
-
     # Download button functionality
     #letter_text.change(
     #    fn=lambda text: gr.DownloadButton(
@@ -241,4 +311,4 @@ with gr.Blocks() as app:
     #)
 
 if __name__ == "__main__":
-    app.launch(theme=gr.themes.Soft())
+    app.launch(theme=theme, css=css)
