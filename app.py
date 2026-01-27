@@ -3,6 +3,7 @@ from test_rag_infloat_multilingual import LegalRAGSystem
 import pandas as pd
 from pathlib import Path
 import re
+import numpy as np
 
 # Initialize RAG system and data
 # rag = LegalRAGSystem()
@@ -33,10 +34,9 @@ def generate_citations(letter_text, num_citations, min_accuracy, state):
     if not letter_text.strip():
         return "Please enter or upload letter text first.", "", state
 
-    print("button clicked")
-    print("file content: ", letter_text)
     # Get all sorted results
-    #state.all_sorted_list = rag.get_top_10_for_letter(letter_text)
+    # state.all_sorted_list = [('NL:CRVB:2021:612', np.float32(0.8029959)), ('NL:RVS:2013:53', np.float32(0.8029759))]
+    state.all_sorted_list = rag.get_top_10_for_letter(letter_text, domain="bicycle", train_ids=train_ids)
     state.ecli_index_display = 0
     state.search_params["num_citations"] = num_citations
     state.search_params["min_accuracy"] = min_accuracy
@@ -52,6 +52,7 @@ def format_citation_results(state):
     start = state.ecli_index_display
     end = start + state.search_params["num_citations"]
     ecli_list = state.all_sorted_list[start:end]
+    print("ECLI LIST FOUND: ", ecli_list)
 
     if not ecli_list:
         return "<p>No citations found.</p>"
@@ -59,6 +60,7 @@ def format_citation_results(state):
     html = "<div style='padding: 10px;'>"
     html += f"<h3>Found {len(state.all_sorted_list)} citations (showing {len(ecli_list)})</h3>"
 
+    print("Entered generate citations")
     for ecli, relevance_score in ecli_list:
         description = fetch_description(ecli)
         score_pct = relevance_score * 100
@@ -108,11 +110,10 @@ def load_file(file):
         return ""
 
     with open(file, 'r', encoding='utf-8') as f:
-        return str(f.read())
+        return f.read()
 
 
 # Create Gradio interface
-# title="CiteConnect", theme=gr.themes.Soft()
 with gr.Blocks() as app:
     gr.Markdown("# CiteConnect")
     gr.Markdown("### Legal Citation Search System")
@@ -157,52 +158,56 @@ with gr.Blocks() as app:
             max_lines=2000
         )
 
-        gr.Markdown("## Search ECLI Citations")
-
-        with gr.Group():
-            gr.Markdown("*Be aware of possible bias that may come from added parameters.*")
-
-            num_citations = gr.Slider(
-                minimum=1,
-                maximum=50,
-                value=9,
-                step=1,
-                label="Number of total citations"
-            )
-
-            min_accuracy = gr.Slider(
-                minimum=0,
-                maximum=100,
-                value=75,
-                step=1,
-                label="Minimum Accuracy (%)"
-            )
-
-            generate_btn = gr.Button(
-                "Generate Citations",
-                variant="primary",
-                size="lg"
-            )
-
-        results_display = gr.HTML(
-            label="Citation Results",
-            visible=False
-        )
-
-        with gr.Row(visible=False) as action_buttons:
-            regenerate_btn = gr.Button("Regenerate", variant="primary")
-
         with gr.Row():
-            ecli_input = gr.Textbox(
-                label="ECLI to add to letter",
-                placeholder="Paste ECLI here to add to letter..."
-            )
-            add_ecli_btn = gr.Button("Add to Letter", variant="secondary")
+            with gr.Column():
+                gr.Markdown("## Search ECLI Citations")
+                with gr.Group():
+                    gr.Markdown("*Be aware of possible bias that may come from added parameters.*")
+
+                    num_citations = gr.Slider(
+                        minimum=1,
+                        maximum=50,
+                        value=9,
+                        step=1,
+                        label="Number of total citations"
+                    )
+
+                    min_accuracy = gr.Slider(
+                        minimum=0,
+                        maximum=100,
+                        value=75,
+                        step=1,
+                        label="Minimum Accuracy (%)"
+                    )
+
+                    generate_btn = gr.Button(
+                        "Generate Citations",
+                        variant="primary",
+                        size="lg"
+                    )
+
+                with gr.Row(visible=False) as action_buttons:
+                    regenerate_btn = gr.Button("Regenerate", variant="primary")
+
+                with gr.Group():
+                    ecli_input = gr.Textbox(
+                        label="ECLI to add to letter",
+                        placeholder="Paste ECLI here to add to letter..."
+                    )
+                    add_ecli_btn = gr.Button("Add to Letter", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Display retrieved ECLI Citations")
+                # Displays the list of ecli citations found
+                results_display = gr.HTML(
+                    label="Citation Results",
+                    visible=True
+                )
 
     # Event handlers
     file_upload.upload(
         fn=load_file,
-        inputs=[file_upload],
+        inputs=file_upload,
         outputs=letter_text
     )
 
@@ -321,4 +326,4 @@ with gr.Blocks() as app:
 
 
 if __name__ == "__main__":
-    app.launch()
+    app.launch(theme=gr.themes.Soft())
