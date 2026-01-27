@@ -6,7 +6,7 @@ import re
 
 # Initialize RAG system and data
 # rag = LegalRAGSystem()
-ecli_df = pd.read_excel("../data/DATA ecli_nummers juni 2025 v1 (version 1).xlsx").set_index('ecli_nummer')
+ecli_df = pd.read_excel("data/DATA ecli_nummers juni 2025 v1 (version 1).xlsx").set_index('ecli_nummer')
 
 
 # Global state (will be managed through Gradio's state components)
@@ -133,9 +133,22 @@ with gr.Blocks() as app:
             download_btn = gr.DownloadButton(
                 label="Download text",
             )
-            preview_btn = gr.Button(
+            preview_pdf_btn = gr.Button(
                 "Preview PDF",
+                variant="secondary"
             )
+            download_pdf_btn = gr.DownloadButton(
+                label="Download PDF",
+                visible=False
+            )
+
+        # PDF Preview - displayed above the editor
+        pdf_output = gr.File(
+            label="PDF Preview",
+            visible=False,
+            interactive=False,
+            show_label=True
+        )
 
         # Editor
         letter_text = gr.Textbox(
@@ -211,25 +224,101 @@ with gr.Blocks() as app:
         outputs=[letter_text]
     )
 
-    #preview_btn.click(
-    #    fn=lambda: "Preview functionality to be implemented",
-    #    inputs=[],
-    #    outputs=[preview_output]
-    #).then(
-    #    fn=lambda: gr.update(visible=True),
-    #    outputs=[preview_output]
-    #)
 
     # Download button functionality
-    letter_text.change(
-        fn=lambda text: gr.DownloadButton(
-            label="Download text",
-            value=text,
-            visible=bool(text.strip())
-        ),
+    def prepare_download(text):
+        """Save text to a temporary file for download"""
+        if not text.strip():
+            return None
+        
+        # Create a temporary file
+        temp_file = Path("temp_letter.txt")
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            f.write(text)
+        return str(temp_file)
+    
+    download_btn.click(
+        fn=prepare_download,
         inputs=[letter_text],
         outputs=[download_btn]
     )
+    
+    # Preview PDF functionality
+    def generate_pdf_preview(text):
+        """Generate PDF for preview"""
+        if not text.strip():
+            return None, gr.update(visible=False), None, gr.update(visible=False)
+        
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import cm
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.enums import TA_LEFT
+            
+            # Create PDF with proper Dutch formatting
+            pdf_path = Path("juridisch_advies.pdf")
+            doc = SimpleDocTemplate(
+                str(pdf_path), 
+                pagesize=A4,
+                leftMargin=2.5*cm,
+                rightMargin=2.5*cm,
+                topMargin=2.5*cm,
+                bottomMargin=2.5*cm
+            )
+            
+            styles = getSampleStyleSheet()
+            
+            # Create a custom style for better formatting
+            normal_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Normal'],
+                fontSize=11,
+                leading=14,
+                alignment=TA_LEFT,
+                spaceAfter=12
+            )
+            
+            story = []
+            
+            # Split text into paragraphs and add to PDF
+            paragraphs = text.split('\n\n')
+            for para_text in paragraphs:
+                if para_text.strip():
+                    # Replace single newlines with <br/> for line breaks within paragraphs
+                    formatted_text = para_text.replace('\n', '<br/>')
+                    p = Paragraph(formatted_text, normal_style)
+                    story.append(p)
+                    story.append(Spacer(1, 0.3*cm))
+            
+            doc.build(story)
+            return str(pdf_path), gr.update(visible=True), str(pdf_path), gr.update(visible=True)
+            
+        except ImportError as e:
+            print(f"ReportLab not installed: {e}")
+            return None, gr.update(visible=False), None, gr.update(visible=False)
+        except Exception as e:
+            print(f"Error generating PDF: {e}")
+            return None, gr.update(visible=False), None, gr.update(visible=False)
+    
+    # Function to close/hide the PDF preview
+    def close_pdf_preview():
+        """Hide the PDF preview and download button"""
+        return gr.update(visible=False, value=None), gr.update(visible=False)
+    
+    preview_pdf_btn.click(
+        fn=generate_pdf_preview,
+        inputs=[letter_text],
+        outputs=[pdf_output, pdf_output, download_pdf_btn, download_pdf_btn]
+    )
+    
+    # When user clicks X on the file preview, hide both preview and download button
+    pdf_output.clear(
+        fn=close_pdf_preview,
+        inputs=[],
+        outputs=[pdf_output, download_pdf_btn]
+    )
+
 
 if __name__ == "__main__":
     app.launch()
