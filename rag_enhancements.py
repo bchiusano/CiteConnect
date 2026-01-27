@@ -307,9 +307,9 @@ def get_popular_ecli_from_data(
 def apply_citation_context_boost(
     chunk_hits: List[Dict],
     proto_hits: List[Dict],
-    boost_weight_high: float = 0.75,  # 增加 citation boost
+    boost_weight_high: float = 0.75,  # increase citation boost
     boost_weight_normal: float = 0.55,
-    similarity_threshold: float = 0.70  # 稍微降低阈值
+    similarity_threshold: float = 0.70  
 ) -> Tuple[List[Dict], Dict[str, float], Dict[str, str], Dict[str, str]]:
     # Apply citation context boost, returns (hits, proto_best_sim, proto_issue, proto_best_text)
     # Build prototype maps
@@ -472,6 +472,7 @@ def enhance_retrieval_results(
 ) -> List[Dict]:
     """Apply all enhancements. citation_db is a separate collection for citation prototypes."""
     # Guard: require train_ids when using features that depend on training data
+
     if use_citation_context or use_popularity:
         assert train_ids is not None and len(train_ids) > 0, \
             "train_ids required when use_citation_context or use_popularity is True (prevents data leakage)"
@@ -538,4 +539,29 @@ def enhance_retrieval_results(
         for h in ecli_hits:
             h["is_fallback"] = False
     
+    # rescale final scores to [0,1] for UI
+    rescale_scores_minmax_inplace(ecli_hits, key="score")
+
     return ecli_hits
+
+def rescale_scores_minmax_inplace(results, key="score", eps=1e-12):
+    """
+    In-place monotonic rescaling of scores to [0, 1].
+    Ranking is preserved.
+    """
+    if not results:
+        return results
+
+    scores = [float(r.get(key, 0.0)) for r in results]
+    mn, mx = min(scores), max(scores)
+
+    if mx - mn < eps:
+        for r in results:
+            r[key] = 1.0
+        return results
+
+    for r in results:
+        s = float(r.get(key, 0.0))
+        r[key] = (s - mn) / (mx - mn + eps)
+
+    return results
