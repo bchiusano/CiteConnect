@@ -2,8 +2,11 @@ import gradio as gr
 from test_rag_infloat_multilingual import LegalRAGSystem
 import pandas as pd
 from pathlib import Path
-import re
-import numpy as np
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.enums import TA_LEFT
 
 # Initialize RAG system and data
 print("initialise rag system")
@@ -73,7 +76,7 @@ class AppState:
         self.ecli_index_display = 0
         self.search_params = {
             "num_citations": 10,
-            "min_accuracy": 75
+            "min_accuracy": 30
         }
 
 
@@ -174,6 +177,70 @@ def load_file(file):
         return f.read()
 
 
+# Download button functionality
+def prepare_download(text):
+    """Save text to a temporary file for download"""
+    if not text.strip():
+        return None
+
+    # Create a temporary file
+    temp_file = Path("Legal_Advice_Letter.txt")
+    with open(temp_file, 'w', encoding='utf-8') as f:
+        f.write(text)
+    return str(temp_file)
+
+
+# Preview PDF functionality
+def generate_pdf(text):
+    """Generate PDF for preview"""
+    if not text.strip():
+        return None, gr.update(visible=False), None, gr.update(visible=False)
+
+    try:
+
+        # Create PDF with proper Dutch formatting
+        pdf_path = Path("Legal_Advice_Letter.pdf")
+        doc = SimpleDocTemplate(
+            str(pdf_path),
+            pagesize=A4,
+            leftMargin=2.5*cm,
+            rightMargin=2.5*cm,
+            topMargin=2.5*cm,
+            bottomMargin=2.5*cm
+        )
+
+        styles = getSampleStyleSheet()
+
+        # Create a custom style for better formatting
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=11,
+            leading=14,
+            alignment=TA_LEFT,
+            spaceAfter=12
+        )
+
+        story = []
+
+        # Split text into paragraphs and add to PDF
+        paragraphs = text.split('\n\n')
+        for para_text in paragraphs:
+            if para_text.strip():
+                # Replace single newlines with <br/> for line breaks within paragraphs
+                formatted_text = para_text.replace('\n', '<br/>')
+                p = Paragraph(formatted_text, normal_style)
+                story.append(p)
+                story.append(Spacer(1, 0.3*cm))
+
+        doc.build(story)
+        return str(pdf_path)
+
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        return None
+
+
 # Create Gradio interface
 with gr.Blocks() as app:
     gr.Markdown("# CiteConnect")
@@ -194,25 +261,14 @@ with gr.Blocks() as app:
             )
 
             download_btn = gr.DownloadButton(
-                label="Download text",
+                label="Download .txt",
                 elem_classes="custom-button"
             )
-            preview_pdf_btn = gr.Button(
-                "Preview PDF",
-                variant="secondary"
-            )
-            download_pdf_btn = gr.DownloadButton(
-                label="Download PDF",
-                visible=False
-            )
 
-        # PDF Preview - displayed above the editor
-        pdf_output = gr.File(
-            label="PDF Preview",
-            visible=False,
-            interactive=False,
-            show_label=True
-        )
+            download_pdf_btn = gr.DownloadButton(
+                label="Download .pdf",
+                elem_classes="custom-button"
+            )
 
         # Editor
         letter_text = gr.Textbox(
@@ -239,7 +295,7 @@ with gr.Blocks() as app:
                     min_accuracy = gr.Slider(
                         minimum=0,
                         maximum=100,
-                        value=75,
+                        value=30,
                         step=1,
                         label="Minimum Accuracy (%)"
                     )
@@ -308,99 +364,16 @@ with gr.Blocks() as app:
         outputs=[letter_text]
     )
 
-
-    # Download button functionality
-    def prepare_download(text):
-        """Save text to a temporary file for download"""
-        if not text.strip():
-            return None
-
-        # Create a temporary file
-        temp_file = Path("temp_letter.txt")
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            f.write(text)
-        return str(temp_file)
-
     download_btn.click(
         fn=prepare_download,
         inputs=[letter_text],
         outputs=[download_btn]
     )
 
-    # Preview PDF functionality
-    def generate_pdf_preview(text):
-        """Generate PDF for preview"""
-        if not text.strip():
-            return None, gr.update(visible=False), None, gr.update(visible=False)
-
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.units import cm
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-            from reportlab.lib.enums import TA_LEFT
-
-            # Create PDF with proper Dutch formatting
-            pdf_path = Path("juridisch_advies.pdf")
-            doc = SimpleDocTemplate(
-                str(pdf_path),
-                pagesize=A4,
-                leftMargin=2.5*cm,
-                rightMargin=2.5*cm,
-                topMargin=2.5*cm,
-                bottomMargin=2.5*cm
-            )
-
-            styles = getSampleStyleSheet()
-
-            # Create a custom style for better formatting
-            normal_style = ParagraphStyle(
-                'CustomNormal',
-                parent=styles['Normal'],
-                fontSize=11,
-                leading=14,
-                alignment=TA_LEFT,
-                spaceAfter=12
-            )
-
-            story = []
-
-            # Split text into paragraphs and add to PDF
-            paragraphs = text.split('\n\n')
-            for para_text in paragraphs:
-                if para_text.strip():
-                    # Replace single newlines with <br/> for line breaks within paragraphs
-                    formatted_text = para_text.replace('\n', '<br/>')
-                    p = Paragraph(formatted_text, normal_style)
-                    story.append(p)
-                    story.append(Spacer(1, 0.3*cm))
-
-            doc.build(story)
-            return str(pdf_path), gr.update(visible=True), str(pdf_path), gr.update(visible=True)
-
-        except ImportError as e:
-            print(f"ReportLab not installed: {e}")
-            return None, gr.update(visible=False), None, gr.update(visible=False)
-        except Exception as e:
-            print(f"Error generating PDF: {e}")
-            return None, gr.update(visible=False), None, gr.update(visible=False)
-
-    # Function to close/hide the PDF preview
-    def close_pdf_preview():
-        """Hide the PDF preview and download button"""
-        return gr.update(visible=False, value=None), gr.update(visible=False)
-
-    preview_pdf_btn.click(
-        fn=generate_pdf_preview,
+    download_pdf_btn.click(
+        fn=generate_pdf,
         inputs=[letter_text],
-        outputs=[pdf_output, pdf_output, download_pdf_btn, download_pdf_btn]
-    )
-
-    # When user clicks X on the file preview, hide both preview and download button
-    pdf_output.clear(
-        fn=close_pdf_preview,
-        inputs=[],
-        outputs=[pdf_output, download_pdf_btn]
+        outputs=[download_pdf_btn]
     )
 
 
