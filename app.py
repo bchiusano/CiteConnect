@@ -69,10 +69,10 @@ theme = gr.themes.Default().set(
 # Global state (will be managed through Gradio's state components)
 class AppState:
     def __init__(self):
-        self.all_sorted_list = []
+        self.min_list = []
         self.ecli_index_display = 0
         self.search_params = {
-            "num_citations": 9,
+            "num_citations": 10,
             "min_accuracy": 75
         }
 
@@ -92,9 +92,12 @@ def generate_citations(letter_text, num_citations, min_accuracy, state):
 
     # Get all sorted results
     # for debugging purposes
-    #state.all_sorted_list = [('NL:CRVB:2021:612', np.float32(0.8029959)), ('NL:RVS:2013:53', np.float32(0.8029759))]
-    state.all_sorted_list = rag.get_top_10_for_letter(letter_text, domain="bicycle", train_ids=train_ids)
-
+    #all_sorted_list = [('NL:CRVB:2021:612', np.float32(0.8029959)), ('NL:RVS:2013:53', np.float32(0.8029759))]
+    all_sorted_list = rag.get_top_10_for_letter(letter_text, domain="bicycle", train_ids=train_ids)
+    state.min_list = [(ecli, score) for ecli, score in all_sorted_list if score >= min_accuracy/100]
+    print("min accuracy: ", min_accuracy/100)
+    print("ALL: ", all_sorted_list)
+    print("CHOSEN: ", state.min_list)
     state.ecli_index_display = 0
     state.search_params["num_citations"] = num_citations
     state.search_params["min_accuracy"] = min_accuracy
@@ -102,21 +105,21 @@ def generate_citations(letter_text, num_citations, min_accuracy, state):
     # Display results
     results_html = format_citation_results(state)
 
-    return results_html, gr.update(visible=False), gr.update(visible=True), state
+    return results_html, gr.update(visible=False), gr.update(visible=True), gr.update(visible=True), state
 
 
 def format_citation_results(state):
     """Format citation results as HTML"""
     start = state.ecli_index_display
     end = start + state.search_params["num_citations"]
-    ecli_list = state.all_sorted_list[start:end]
+    ecli_list = state.min_list[start:end]
     print("ECLI LIST FOUND: ", ecli_list)
 
     if not ecli_list:
         return "<p>No citations found.</p>"
 
     html = "<div style='padding: 10px;'>"
-    html += f"<h3>Found {len(state.all_sorted_list)} citations (showing {len(ecli_list)})</h3>"
+    html += f"<h3>Found {len(state.min_list)} citations (showing {len(ecli_list)})</h3>"
 
     print("Entered generate citations")
     for ecli, relevance_score in ecli_list:
@@ -126,7 +129,7 @@ def format_citation_results(state):
         html += f"""
         <details style='margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px;'>
             <summary style='cursor: pointer; font-weight: bold;'>
-                {ecli} (Score: {score_pct:.3f}%)
+                {ecli} (Score: {score_pct:.2f}%)
             </summary>
             <div style='padding: 10px; margin-top: 10px; background-color: #f9f9f9;'>
                 <p>{description}</p>
@@ -148,7 +151,7 @@ def regenerate_citations(state):
 
     # Reset to beginning if we've shown all
     next_end_index = state.ecli_index_display + state.search_params["num_citations"]
-    if next_end_index >= len(state.all_sorted_list):
+    if next_end_index >= len(state.min_list):
         state.ecli_index_display = 0
 
     results_html = format_citation_results(state)
@@ -267,7 +270,7 @@ with gr.Blocks() as app:
                 # Results
                 results_display = gr.HTML(
                     label="Citation Results",
-                    visible=True
+                    visible=False
                 )
 
     # Event handlers
@@ -284,7 +287,7 @@ with gr.Blocks() as app:
     ).then(
         fn=generate_citations,
         inputs=[letter_text, num_citations, min_accuracy, state],
-        outputs=[results_display, loading_spinner, action_buttons, state]
+        outputs=[results_display, loading_spinner, results_display, action_buttons, state]
     )
 
     regenerate_btn.click(
