@@ -12,13 +12,17 @@ from langchain_core.documents import Document
 # Data paths
 DATA_DIR = "data/"
 EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
-COLLECTION_NAME = "legal_rag"
+COLLECTION_NAME = "legal_rag_infloat_1500"
 
 ecli_path = os.path.join(DATA_DIR, "DATA ecli_nummers juni 2025 v1 (version 1).xlsx")
 letters_path = os.path.join(DATA_DIR, "Dataset Advice letters on objections towing of bicycles.xlsx")
 
 # Directory to persist Chroma database
+<<<<<<< Updated upstream:rag_pipeline_infloat_multilingual.py
 PERSIST_DIR = os.path.join("resources", "chroma_db_infloat_multilingual")
+=======
+PERSIST_DIR = "resources/chroma_db_infloat_1500"
+>>>>>>> Stashed changes:src/rag_pipeline_infloat_multilingual.py
 
 # Global placeholder for embeddings object (set by create_embeddings)
 embeddings = None
@@ -64,7 +68,7 @@ def load_data_and_prepare_documents():
 # Create a text splitter
 # chunk_size = maximum number of characters per chunk
 # chunk_overlap = number of characters overlapping between chunks to preserve context
-def split_documents(all_docs, chunk_size=800, chunk_overlap=150):
+def split_documents(all_docs, chunk_size=1500, chunk_overlap=300):
     """Split documents into chunks using RecursiveCharacterTextSplitter."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -103,12 +107,25 @@ def create_embeddings(split_docs, model_name):
     print(f"Using model: {model_name}")
     print(f"Using device: {device}")
 
+<<<<<<< Updated upstream:rag_pipeline_infloat_multilingual.py
     # Initialize embeddings with auto-detected device
     embeddings = HuggingFaceEmbeddings(
         model_name=model_name,
         model_kwargs={'device': device},
         encode_kwargs={'normalize_embeddings': True},
         show_progress=True
+=======
+    # Initialize embeddings
+    # embeddings = HuggingFaceEmbeddings(model_name=model_name)
+    embeddings = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={'device': 'mps'},
+        encode_kwargs={
+            'normalize_embeddings': True,
+            'batch_size': 16
+        },
+        show_progress=True 
+>>>>>>> Stashed changes:src/rag_pipeline_infloat_multilingual.py
     )
 
     # Test on the first chunk to confirm model works
