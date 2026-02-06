@@ -125,7 +125,7 @@ Evaluation uses an 80/20 train-test split with fixed random seed (40) for reprod
 
 | Dataset | Description | Size |
 |---------|-------------|------|
-| Case law corpus | Dutch legal decisions with ECLI | ~75,000 cases |
+| Case law corpus | Dutch legal decisions with ECLI | 2447 cases |
 | Advice letters | Annotated letters with ground truth citations | 567 letters |
 
 
