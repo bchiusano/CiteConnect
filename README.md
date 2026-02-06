@@ -19,7 +19,7 @@ A hybrid retrieval system that links Dutch legal advice letters to relevant case
 - **Citation-Context Boosting**: Leverages historical citation patterns to improve retrieval accuracy
 - **Popularity-Based Fallback**: Incorporates landmark case recognition based on citation frequency
 - **Dutch Language Support**: Native Dutch language processing with multilingual models
-- **Interactive Interface**: Streamlit-based web interface (CiteConnect) for legal professionals
+- **Interactive Interface**: Gradio web interface (CiteConnect) for legal professionals
 
 ## Requirements
 
@@ -32,14 +32,17 @@ A hybrid retrieval system that links Dutch legal advice letters to relevant case
 
 ```bash
 # Clone the repository
-git clone https://github.com/bchiusano/DSP-Project1.git
-cd DSP-Project1
+git clone https://github.com/bchiusano/CiteConnect.git
+cd CiteConnect
 
 # Install dependencies
 pip install pandas openpyxl langchain langchain-classic langchain-chroma \
     langchain-text-splitters langchain-huggingface langchain-community \
     chromadb openai sentence-transformers tiktoken huggingface_hub \
     flashrank rank-bm25 nlp spacy transformers torch
+
+# Requirements .txt
+Dependencies can also be installed after creating a virtual environment with the provided requirements.txt
 
 # Download Dutch language model
 python -m spacy download nl_core_news_md
@@ -54,7 +57,7 @@ huggingface-cli download intfloat/multilingual-e5-large --local-dir ./models/int
 ### Web Interface
 
 ```bash
-streamlit run app.py
+python app.py
 ```
 
 ### Programmatic Usage
