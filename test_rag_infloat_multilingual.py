@@ -176,7 +176,7 @@ class LegalRAGSystem:
             train_ids=train_ids,
             force_rebuild=force_rebuild
         )
-        print("Citation_db working with ids: ", train_ids)
+        # print("Citation_db working with ids: ", train_ids)
 
     def load_citation_db_for_ui(self):
         self.citation_db = load_or_build_citation_db(
