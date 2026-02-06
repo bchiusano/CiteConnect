@@ -4,6 +4,13 @@ A hybrid retrieval system that links Dutch legal advice letters to relevant case
 
 ![System Architecture](resources/system_architecture.png)
 
+## Demo
+
+| Video | YouTube | Repository |
+|-------|---------|----------|
+| Teaser | [Watch](https://youtu.be/GDEw6zG8-NA) | [Teaser_CiteConnect.mp4](docs/videos/Teaser_CiteConnect.mp4) |
+| Full Demo | [Watch](https://youtu.be/8QvdedSqDSM) | [Demo_CiteConnect.mp4](docs/videos/Demo_CiteConnect.mp4) |
+
 ## Features
 
 - **Hybrid Retrieval**: Combines dense semantic search (multilingual-e5-large) with sparse lexical search (BM25) using Reciprocal Rank Fusion
